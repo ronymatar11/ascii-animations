@@ -83,6 +83,16 @@ Z0 = SUN_R / (IRIS_R * EU)
 HAND_L, HAND_R, HAND_S = (189.0, 1113.0), (890.0, 775.0), 1.9
 ZE = 1.25                                 # zoom once the eye is revealed
 
+def cam_zoom(t):
+    """one continuous camera move from the explosion to the pupil: the sun slowly recedes, the pull
+    back reveals the eye, the camera keeps easing out (it never stops), then dives into the pupil"""
+    l0, l1 = math.log(Z0), math.log(ZE)
+    drift = 0.035                                         # log-zoom per second, always moving
+    t1 = T_PULL + 1.6
+    D = l0 - l1 - drift * (t1 - DROP)
+    lz = l0 - drift * (max(t, DROP) - DROP) - D * float(smoother(T_IRIS - 0.5, t1, t))
+    return math.exp(lz + math.log(40) * float(smoother(T_DIVE, T_END, t)) ** 2)
+
 def kick(t):
     """1 on each kick after the drop, decaying"""
     if t < DROP: return 0.0
@@ -664,7 +674,7 @@ class Show:
         return idx, col
 
     def pupil_px(self, t):
-        z = ZE * math.exp(math.log(40) * float(smoother(T_DIVE, T_END, t)) ** 2)
+        z = cam_zoom(t)
         rp = IRIS_R * (0.34 + 0.07 + 0.5 * float(smoother(T_DIVE, T_END - 0.2, t)))
         return rp * EU * z
 
@@ -672,7 +682,7 @@ class Show:
         """the two dots in the pupil -> the two moons, as (x, y, r) per moon"""
         if t < T_DIVE and nat is not None:
             return nat
-        rp = IRIS_R * (0.34 + 0.07) * EU * ZE
+        rp = IRIS_R * (0.34 + 0.07) * EU * cam_zoom(T_DIVE)
         k = float(smoother(T_DIVE, T_END + 0.4, t))
         out = []
         w = float(sstep(T_END - 0.3, T_END + 1.2, t))          # once they're moons they drift around
@@ -834,9 +844,7 @@ class Show:
         k = kick(t)
         u = t - DROP
         # camera: starts so close the iris fills the screen as the sun, pulls back, then dives into the pupil
-        kp = float(smoother(T_PULL, T_PULL + 1.1, t))
-        z = math.exp(math.log(Z0) * (1 - kp) + math.log(ZE) * kp)
-        z *= math.exp(math.log(40) * float(smoother(T_DIVE, T_END, t)) ** 2)
+        z = cam_zoom(t)
         e = 1 - math.exp(-u / 0.1)
         cx = self.star_xy[0] + (540 - self.star_xy[0]) * e
         cy = self.star_xy[1] + (960 - self.star_xy[1]) * e
