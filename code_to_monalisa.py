@@ -1,8 +1,9 @@
 """
 Code -> Mona Lisa  |  9:16 ASCII animation in Python
 
-pulse -> hello world -> code everywhere -> code talks -> an eye forms ->
-it looks at us -> camera pulls back: the Mona Lisa on a museum wall.
+hello world -> code everywhere -> code talks -> an eye forms out of it ->
+it searches, blinks, stares at us -> it dissolves into the Mona Lisa's eye ->
+camera pulls back: the Mona Lisa on a museum wall.
 
 Install:  pip install numpy pillow          (+ ffmpeg, or: pip install imageio-ffmpeg)
 Export:   python code_to_monalisa.py --export monalisa.mp4
@@ -19,7 +20,11 @@ CW, CH = 10, 18
 COLS, ROWS = W // CW, H // CH            # 108 x 106 character grid
 OY = (H - ROWS * CH) // 2
 FPS = 30
-DUR = 23.0
+SHIFT = 3.0                               # story time = video time + SHIFT (intro starts on hello world)
+EYE_T0 = 14.0 - SHIFT                     # video time the eye phase starts
+EYE_DUR = 4.8                             # forming, searching, staring, pulling back
+EYE_PULL = 4.1                            # eye-local time the pull back starts
+DUR = 23.0 - SHIFT + EYE_DUR
 CX, CY = COLS / 2, ROWS / 2               # grid center (54, 53)
 ROW0 = ROWS // 2 - 1                      # hello world row
 CP = COLS // 2 - 12                       # hello world column
@@ -113,6 +118,11 @@ def render(idx, col, z=1.0, cx=CX, cy=CY):
     out = blk.transform((W, H), Image.AFFINE, (a, 0, ox, 0, a, oy), resample=Image.BICUBIC, fillcolor=(0, 0, 0))
     return np.asarray(out)
 
+# ------------------------------------------------------------------ eye geometry
+EYE_UNIT = 315.0                          # px per eye unit (eye is 2.6 units wide)
+EYE_ZMAX = 1.2                            # push in while it stares
+EYE_MATCH = 1.0                           # eye zoom at which it matches the painting's eye at w0
+
 # ------------------------------------------------------------------ code text
 POOL = [
     "import numpy as np", "from eye import Iris, Pupil", "def see(self): return self.light",
@@ -166,18 +176,7 @@ def colorize(text):
 HELLO = 'print("hello world")'
 PROMPT = ">>> "
 
-# ------------------------------------------------------------------ timeline: phase A (pulse, hello, code)
-BEATS = [1.05, 1.9, 2.75]
-ECG_W, ECG_SPEED = 32, 29.0
-
-def ecg_val(tau):
-    v = 0.0
-    for b in BEATS:
-        d = tau - b
-        v += 0.12 * math.exp(-((d + 0.18) / 0.03) ** 2) - 0.15 * math.exp(-((d + 0.03) / 0.012) ** 2)
-        v += 1.0 * math.exp(-(d / 0.013) ** 2) - 0.28 * math.exp(-((d - 0.03) / 0.012) ** 2)
-        v += 0.25 * math.exp(-((d - 0.22) / 0.05) ** 2)
-    return v
+# ------------------------------------------------------------------ timeline: phase A (hello, code)
 
 def zoomA(t):
     return math.exp(math.log(3.4) * (1 - float(smoother(6.3, 10.2, t))))
@@ -248,44 +247,19 @@ class Story:
         rr, cc = np.mgrid[0:ROWS, 0:COLS]
         rn = np.hypot((cc + 0.5 - CX) / (COLS / 2), (rr + 0.5 - CY) / (ROWS / 2)) / 1.414
         self.Ts = 12.0 + 1.9 * (0.72 * rn + 0.28 * rng.random((ROWS, COLS)))
+        # eye -> painting dissolve, center out
+        self.Tm = 14.0 + 0.75 * (0.65 * rn + 0.35 * rng.random((ROWS, COLS)))
 
-        # painting
+        # painting + eye
         self.setup_painting(img_path, eye)
+        self.setup_eye(rng)
         self.full_idx, self.full_col = self.phaseA(self.code_done + 5)
-        self.target = self.phaseC(14.0)
+        self.target = self.eye_frame(0.0)
 
     # ---------- phase A
     def phaseA(self, t):
         idx = np.zeros((ROWS, COLS), np.int64)
         col = np.zeros((ROWS, COLS, 3), np.float32)
-        # ECG pulse
-        if 0.5 <= t < 3.4:
-            fade = 1 - float(sstep(3.0, 3.35, t))
-            c0 = int(CX - ECG_W / 2)
-            pos = (t - 0.5) * ECG_SPEED
-            ho = pos % ECG_W
-            prev = None
-            base = ROW0 + 1
-            for co in range(ECG_W):
-                back = (ho - co) % ECG_W
-                if back > ECG_W - 3:
-                    prev = None; continue
-                tc = t - back / ECG_SPEED
-                if tc < 0.5:
-                    prev = None; continue
-                rowf = base - ecg_val(tc) * 7
-                rr = int(round(rowf))
-                f = math.exp(-(t - tc) / 0.9) * fade
-                c = np.array([0.35, 1.0, 0.55]) * f if back > 0.6 else np.array([0.9, 1.0, 0.9]) * fade
-                cc = c0 + co
-                if prev is None or prev == rr:
-                    idx[rr, cc] = CI["-"]; col[rr, cc] = c
-                else:
-                    lo, hi = min(prev, rr), max(prev, rr)
-                    for q in range(lo, hi + 1):
-                        idx[q, cc] = CI["|"]; col[q, cc] = c
-                    idx[rr, cc] = CI["/"] if rr < prev else CI["\\"]
-                prev = rr
         # hello world
         blink = (t * 1.8) % 2 < 1
         if t >= 3.3:
@@ -371,6 +345,152 @@ class Story:
         col[done] = mixed[done]
         return idx, col
 
+    # ---------- phase E: the eye that forms out of the code
+    def setup_eye(self, rng):
+        X = (np.arange(COLS) + 0.5 - CX) * CW / EYE_UNIT
+        Y = -(np.arange(ROWS) + 0.5 - CY) * CH / EYE_UNIT
+        self.EX, self.EY = np.meshgrid(X, Y)
+        # (root x, length, curl, upper?)
+        self.lashes = []
+        for xr in np.linspace(-1.12, 1.18, 46):
+            xr = xr + rng.uniform(-0.015, 0.015)
+            w = (1 - (xr / 1.3) ** 2) ** 0.4
+            self.lashes.append((xr, 0.22 * w * rng.uniform(0.75, 1.1), rng.uniform(0.25, 0.55), True))
+        for xr in np.linspace(-0.95, 1.05, 22):
+            w = (1 - (xr / 1.3) ** 2) ** 0.5
+            self.lashes.append((xr + rng.uniform(-0.02, 0.02), 0.07 * w * rng.uniform(0.6, 1.1), 0.3, False))
+        # gaze keyframes: settle, search left / right / up, lock on the viewer
+        self.gaze_kf = [(0.0, 0.0, 0.0), (1.05, -0.21, 0.02), (1.42, 0.20, -0.03), (1.75, 0.06, 0.07), (1.98, 0.0, 0.0)]
+        # then tiny saccades while it stares at us
+        t = 2.45
+        while t < EYE_PULL:
+            self.gaze_kf.append((t, rng.normal(0, 0.016), rng.normal(0, 0.011)))
+            t += rng.uniform(0.3, 0.5)
+        self.gaze_kf.append((EYE_PULL, 0.0, 0.0))
+
+    def gaze(self, u):
+        gx = gy = 0.0
+        for (tk, x, y) in self.gaze_kf:
+            k = float(smoother(tk, tk + 0.08, u))
+            if k <= 0: break
+            gx, gy = gx + (x - gx) * k, gy + (y - gy) * k
+        d = float(sstep(2.0, 2.6, u)) * (1 - float(sstep(EYE_PULL - 0.3, EYE_PULL, u)))
+        return gx + d * 0.008 * math.sin(u * 2.3), gy + d * 0.006 * math.sin(u * 1.7 + 1)
+
+    def cam(self, T):
+        """painting view width / w0 during the pull back, shared by the eye and the painting"""
+        k = float(smoother(EYE_T0 + EYE_PULL, EYE_T0 + EYE_DUR + 1.8, T))
+        return math.exp(math.log(EYE_MATCH / EYE_ZMAX) * (1 - k))
+
+    def eye_frame(self, u):
+        gx, gy = self.gaze(u)
+        op = (0.9 + 0.1 * float(smoother(0.0, 0.8, u))) * (1 - math.exp(-((u - 2.2) / 0.075) ** 2))
+        form = float(smoother(0.05, 0.95, u))
+        R = 0.42
+        # pupil: starts wide open and contracts to reveal the iris, then dilates when it sees us
+        rp = 0.40 - 0.25 * form + 0.04 * float(smoother(2.5, 3.6, u)) + 0.005 * math.sin(u * 6)
+        if u < EYE_PULL:
+            z = 1 + (EYE_ZMAX - 1) * float(smoother(2.0, EYE_PULL, u))
+        else:
+            z = EYE_MATCH / self.cam(EYE_T0 + u)
+        hx, hy = 0.025 * math.sin(u * 0.9), 0.015 * math.sin(u * 1.4 + 0.5)
+        X, Y = self.EX / z - hx, self.EY / z - hy
+
+        # lids
+        ex = 1.3
+        sx = np.clip(1 - (X / ex) ** 2, 0, 1)
+        y_low = -0.40 * sx ** 0.85 - 0.03 + 0.03 * X
+        y_up = y_low + (0.58 * sx ** 0.7 + 0.02 - 0.04 * X - y_low) * op
+        inside = (np.abs(X) < ex) & (Y < y_up) & (Y > y_low)
+
+        # skin
+        r2 = (X / 1.7) ** 2 + (Y / 1.2) ** 2
+        crease_y = 0.84 * sx ** 0.65 + 0.10
+        crease = np.exp(-((Y - crease_y) / 0.045) ** 2) * (np.abs(X) < 1.45)
+        skin = (0.03 + 0.12 * fbm(X * 2.5, Y * 2.5, 4, 3)) * np.exp(-r2 * 2.4) * (1 - 0.6 * crease)
+        rim = np.exp(-((Y - y_up) / 0.022) ** 2) * (np.abs(X) < ex)
+        b = np.where(inside, 0, np.clip(skin + 0.22 * rim, 0, 1))
+        col = np.zeros(X.shape + (3,), np.float32)
+        col[:] = (1.0, 0.62, 0.36)
+
+        # sclera
+        ball = np.clip(1 - (np.hypot(X * 0.85, Y) / 1.25) ** 2, 0, 1)
+        shadow = sstep(0.0, 0.30, y_up - Y)
+        scl = (0.30 + 0.42 * ball) * (0.5 + 0.5 * shadow) * (0.92 + 0.12 * fbm(X * 5, Y * 5, 3, 9))
+        b = np.where(inside, scl, b)
+        scol = np.stack([np.ones_like(X), 0.88 - 0.1 * (1 - ball), 0.80 - 0.15 * (1 - ball)], -1)
+        col = np.where(inside[..., None], scol, col)
+
+        # iris: gold collar fading into code-cyan, fibers spin into place while it forms
+        dx, dy = X - gx, Y - gy
+        d = np.hypot(dx, dy)
+        a = np.arctan2(dy, dx) + 1.6 * (1 - form) ** 2
+        fib_n = fbm(np.cos(a) * 10 + d * 2.0, np.sin(a) * 10 + d * 1.3, 5, 21)
+        fibers = 0.5 + 0.5 * np.sin(a * 70 + fib_n * 10)
+        zone = sstep(rp * 1.3, rp * 2.0, d)
+        ib = 0.45 + 0.35 * fib_n + 0.30 * fibers
+        ib = ib + 0.30 * np.exp(-((d - rp * 1.9) / 0.025) ** 2)
+        ib = ib + 0.8 * np.exp(-((d - rp) / 0.03) ** 2) * (1 - form)       # bright edge as the pupil closes
+        ib = ib * (1 - 0.85 * sstep(0.80 * R, R, d)) * (0.45 + 0.55 * shadow)
+        iris = inside & (d < R * 1.02)
+        pupil = inside & (d < rp)
+        b = np.where(iris, np.clip(ib, 0, 1), b)
+        gold, cyan = np.array([1.0, 0.78, 0.38]), np.array([0.25, 0.85, 1.0])
+        icol = (gold * (1 - zone[..., None]) + cyan * zone[..., None]) * (0.85 + 0.3 * fib_n[..., None])
+        col = np.where(iris[..., None], icol, col)
+        b = np.where(pupil, 0.0, b)
+
+        # wet highlights on the cornea
+        hl1 = np.exp(-(((dx + 0.10) / 0.06) ** 4 + ((dy - 0.10) / 0.045) ** 4))
+        hl2 = np.exp(-((dx - 0.12) ** 2 + (dy + 0.12) ** 2) / 0.0005)
+        hl = np.maximum(hl1, 0.7 * hl2) * op
+        b = np.where(inside, np.maximum(b, hl), b)
+        col = np.where((inside & (hl > 0.25))[..., None], np.array([1.0, 0.97, 0.94]), col)
+
+        jr = np.random.default_rng(int(u * 12) + 99).integers(-1, 2, (ROWS, COLS))
+        k = np.clip(np.round(b * (len(RAMP) - 1)).astype(int) + jr, 0, len(RAMP) - 1)
+        idx = np.where(b < 0.04, 0, RAMP[k])
+        col = col * np.clip(0.30 + 0.85 * b, 0, 1)[..., None]
+
+        # iris fibers drawn as radial strokes
+        phi = np.arctan2(dy / CH, dx / CW) % np.pi
+        spoke = iris & ~pupil & (fibers > 0.62) & (b > 0.2)
+        glyph = np.select([phi < np.pi / 8, phi < 3 * np.pi / 8, phi < 5 * np.pi / 8, phi < 7 * np.pi / 8],
+                          [CI["-"], CI["/"], CI["|"], CI["\\"]], CI["-"])
+        idx = np.where(spoke, glyph, idx)
+        # still made of code while it forms
+        if form < 1:
+            rng = np.random.default_rng(int(u * 30) + 7)
+            m = iris & ~pupil & (rng.random((ROWS, COLS)) < 0.7 * (1 - form))
+            idx[m] = rng.choice(PRINTABLE, int(m.sum()))
+            col[m] = np.array([0.55, 0.85, 1.0]) * (0.5 + 0.5 * b[m, None])
+
+        # eyelashes
+        if op > 0.03:
+            on = float(sstep(0.03, 0.25, op))
+            for (xr, ln, cu, up) in self.lashes:
+                yl = -0.40 * (1 - (xr / ex) ** 2) ** 0.85 - 0.03 + 0.03 * xr
+                if up:
+                    yo = 0.58 * (1 - (xr / ex) ** 2) ** 0.7 + 0.02 - 0.04 * xr
+                    py, th0, sgn = yl + (yo - yl) * op, 0.75 * xr / ex, 1.0
+                    ln = ln * (0.45 + 0.55 * op)
+                else:
+                    py, th0, sgn = yl - 0.01, xr / ex, -1.0
+                px = xr
+                for st in range(9):
+                    f = st / 9
+                    th = th0 + cu * f * np.sign(xr) * (1 if up else 0.5)
+                    ddx, ddy = math.sin(th) * ln / 9, sgn * math.cos(th) * ln / 9
+                    px, py = px + ddx, py + ddy
+                    i = int(round((px + hx) * z * EYE_UNIT / CW + CX - 0.5))
+                    j = int(round(CY - (py + hy) * z * EYE_UNIT / CH - 0.5))
+                    if not (0 <= i < COLS and 0 <= j < ROWS): continue
+                    ang = math.atan2(ddx / CW, abs(ddy) / CH)
+                    ang = ang if up else -ang
+                    idx[j, i] = CI["|"] if abs(ang) < 0.4 else (CI["-"] if abs(ang) > 1.2 else (CI["/"] if ang > 0 else CI["\\"]))
+                    col[j, i] = np.array([1.0, 0.80, 0.62]) * (0.85 - 0.5 * f) * on
+        return idx, col.astype(np.float32)
+
     # ---------- painting / frame / wall
     def setup_painting(self, path, eye):
         im = Image.open(path).convert("RGB")
@@ -411,35 +531,29 @@ class Story:
 
     def view(self, t):
         w0 = self.w0
-        w_look = w0 * (1 - 0.1 * float(smoother(14.0, 16.6, t)))
+        w_look = w0 * self.cam(t - SHIFT + EYE_DUR) * (1 - 0.06 * float(smoother(15.8, 16.6, t)))
         k = float(smoother(16.6, 21.2, t))
         w = math.exp(math.log(w_look) * (1 - k) + math.log(self.w1) * k) * (1 + 0.012 * max(0, t - 21.2))
         f = (w - w_look) / (self.w1 - w_look) if k > 0 else 0.0
         cx = self.ex + (self.c1[0] - self.ex) * f
         cy = self.ey + (self.c1[1] - self.ey) * f
-        g = 1 - float(smoother(15.0, 15.45, t))
-        gaze = (-2.6 * self.pw / 400 * g, 0.3 * self.pw / 400 * g)
-        return w, cx, cy, gaze
+        return w, cx, cy
 
     def phaseC(self, t):
-        w, cx, cy, gaze = self.view(t)
+        w, cx, cy = self.view(t)
         upc = w / W
         jx = (np.arange(COLS) + 0.5 - CX) * CW * upc + cx
         jy = (np.arange(ROWS) + 0.5 - CY) * CH * upc + cy
         X, Y = np.meshgrid(jx, jy)
         pw, ph, FB = self.pw, self.ph, self.FB
 
-        # gaze warp around the iris
         s = pw / 400
-        dx, dy = (X - self.ex) / (7.5 * s), (Y - self.ey) / (4.2 * s)
-        fall = np.clip(1 - (dx * dx + dy * dy), 0, 1) ** 2
-        Xs, Ys = X - gaze[0] * fall, Y - gaze[1] * fall
 
         # painting (trilinear sampling)
         fp = max(CW * upc * self.up, 1.0)
         lf = min(math.log2(fp), len(self.levels) - 1.001)
         l0 = int(lf); fr = lf - l0
-        rgb = self._sample(l0, Xs, Ys) * (1 - fr) + self._sample(l0 + 1, Xs, Ys) * fr
+        rgb = self._sample(l0, X, Y) * (1 - fr) + self._sample(l0 + 1, X, Y) * fr
         lum = rgb @ np.array([0.299, 0.587, 0.114], np.float32)
         lumn = np.clip((lum - 0.05) / 0.72, 0, 1) ** 0.85
         pcol = np.clip(rgb * 1.75, 0, 1) * (0.40 + 0.75 * lumn)[..., None]
@@ -495,17 +609,37 @@ class Story:
         return idx, col.astype(np.float32)
 
     # ---------- any frame
-    def frame(self, t, fi):
-        if t < 10.8:
-            idx, col = self.phaseA(t)
-            img = render(idx, col, zoomA(t), CX, CY)
-        elif t < 14.0:
-            idx, col = self.phaseB(t, fi)
-            img = render(idx, col)
+    def morph(self, t, fi):
+        """eye dissolves into the painting, cell by cell from the center out"""
+        idx, col = self.phaseC(t)
+        if t >= self.Tm.max() + 0.35:
+            return idx, col
+        eidx, ecol = self.eye_frame(t - 14.0 + EYE_DUR)
+        a = sstep(self.Tm, self.Tm + 0.35, t)[..., None]
+        col = col * a + np.array([0.95, 0.97, 1.0]) * (1 - a)
+        before = t < self.Tm - 0.15
+        idx = np.where(before, eidx, idx)
+        col = np.where(before[..., None], ecol, col)
+        rng = np.random.default_rng(fi * 5 + 3)
+        dec = ~before & (t < self.Tm)
+        idx[dec] = rng.choice(PRINTABLE, int(dec.sum()))
+        col[dec] = (0.85, 0.95, 1.0)
+        return idx, col.astype(np.float32)
+
+    def frame(self, T, fi):
+        """T is video time"""
+        if T < EYE_T0:
+            t = T + SHIFT
+            if t < 10.8:
+                idx, col = self.phaseA(t)
+                img = render(idx, col, zoomA(t), CX, CY)
+            else:
+                img = render(*self.phaseB(t, fi))
+        elif T < EYE_T0 + EYE_DUR:
+            img = render(*self.eye_frame(T - EYE_T0))
         else:
-            idx, col = self.phaseC(t)
-            img = render(idx, col)
-        g = float(sstep(0.0, 0.4, t)) * (1 - float(sstep(22.4, 23.0, t)))
+            img = render(*self.morph(T + SHIFT - EYE_DUR, fi))
+        g = float(sstep(0.0, 0.4, T)) * (1 - float(sstep(DUR - 0.6, DUR, T)))
         return (img * g).astype(np.uint8) if g < 1 else img
 
 # ------------------------------------------------------------------ sound design
@@ -541,13 +675,14 @@ def make_audio(story, path):
         s = np.diff(s, prepend=0) * bright + s * (1 - bright)
         return s * e
 
-    # pulse
-    for b in BEATS:
-        add(b, beep(1000), 0.22); add(b - 0.02, thump(), 0.5); add(b + 0.28, thump(0.25), 0.28)
+    A = lambda t: t - SHIFT                  # story time (code part) -> video time
+    C = lambda t: t - SHIFT + EYE_DUR        # story time (painting part) -> video time
+    E = lambda u: EYE_T0 + u                 # eye time -> video time
+
     # hello world typing (clearly audible) + enter
     for tt in story.type_t:
-        add(tt, click(0.014, 0.8), 0.32 * rng.uniform(0.8, 1.1))
-    add(story.enter_t, click(0.03, 0.4), 0.45)
+        add(A(tt), click(0.014, 0.8), 0.32 * rng.uniform(0.8, 1.1))
+    add(A(story.enter_t), click(0.03, 0.4), 0.45)
     # code writers: lots of tiny clicks, quieter as it gets denser
     times = []
     for (r, a, txt, tc, start, speed) in story.segs:
@@ -561,23 +696,33 @@ def make_audio(story, path):
     sel = times[rng.random(len(times)) < 0.35]
     for tt in sel:
         dens = hist[min(max(int((tt - 6.0) / 0.1), 0), len(hist) - 1)] * 10 * 0.35
-        add(tt, click(0.008, 0.9), 0.22 / math.sqrt(1 + dens / 15) * rng.uniform(0.5, 1.0))
+        add(A(tt), click(0.008, 0.9), 0.22 / math.sqrt(1 + dens / 15) * rng.uniform(0.5, 1.0))
     # rising drone under the code
     tt = np.arange(int(SR * 6.5)) / SR
     f = 55 * (1 + 0.5 * tt / 6.5)
     ph = 2 * np.pi * np.cumsum(f) / SR
     dr = sum(np.sin(ph * h + h) / h for h in range(1, 7)) * (np.minimum(tt / 4.5, 1) ** 2) * np.exp(-np.maximum(tt - 5.6, 0) / 0.3)
-    add(8.0, dr, 0.10)
+    add(A(8.0), dr, 0.10)
     # data blips when code talks
     for p in story.packets[::2]:
-        add(p[0], beep(rng.uniform(1300, 3200), 0.05), 0.045)
-    # eye forms: soft pad swell
-    tt = np.arange(int(SR * 5.0)) / SR
+        add(A(p[0]), beep(rng.uniform(1300, 3200), 0.05), 0.045)
+    # eye forms: soft pad swell, held under the stare
+    d = 3.0 + EYE_DUR
+    tt = np.arange(int(SR * d)) / SR
     pad = sum(np.sin(2 * np.pi * fq * tt + i) for i, fq in enumerate([220, 261.6, 329.6, 440]))
-    pad *= np.sin(np.pi * np.clip(tt / 5.0, 0, 1)) ** 2
-    add(12.6, pad, 0.035)
-    # gaze lock
-    add(15.05, click(0.02, 0.3), 0.35); add(15.05, beep(1800, 0.12), 0.06)
+    pad *= np.minimum(tt / 2.0, 1) ** 2 * np.minimum((d - tt) / 1.5, 1)
+    add(A(12.6), pad, 0.035)
+    # pupil contracts: falling sweep as the iris forms
+    tt = np.arange(int(SR * 0.9)) / SR
+    add(E(0.05), np.sin(2 * np.pi * np.cumsum(900 * np.exp(-tt / 0.3) + 180) / SR) * np.exp(-tt / 0.35), 0.06)
+    # saccades while it searches, a soft blink, then it locks onto us
+    for (tk, x, y) in story.gaze_kf[1:4]:
+        add(E(tk), click(0.01, 0.6), 0.18)
+    add(E(2.2), click(0.03, 0.15), 0.25)
+    add(E(1.98), beep(1800, 0.12), 0.06); add(E(1.98), click(0.02, 0.3), 0.3)
+    # eye dissolves into the painting
+    for k in range(14):
+        add(C(14.0) + k * 0.055, beep(rng.uniform(1500, 3000), 0.05), 0.03)
     # pull back whoosh
     d = 5.0
     nz = rng.normal(0, 1, int(SR * d))
@@ -586,11 +731,11 @@ def make_audio(story, path):
     y = np.zeros_like(nz); acc = 0.0
     for i in range(len(nz)):
         acc += cut[i] * (nz[i] - acc); y[i] = acc
-    add(16.5, y * np.sin(np.pi * np.clip(tt / d, 0, 1)) ** 1.5, 0.9)
-    # room tone + one last heartbeat
+    add(C(16.5), y * np.sin(np.pi * np.clip(tt / d, 0, 1)) ** 1.5, 0.9)
+    # room tone + a heartbeat
     rt = rng.normal(0, 1, int(SR * 3.0)); rt = np.convolve(rt, np.ones(60) / 60, "same")
-    add(20.0, rt * np.minimum(np.arange(len(rt)) / SR / 1.0, 1), 0.25)
-    add(21.9, thump(), 0.4); add(22.18, thump(0.25), 0.22)
+    add(C(20.0), rt * np.minimum(np.arange(len(rt)) / SR / 1.0, 1), 0.25)
+    add(C(21.9), thump(), 0.4); add(C(22.18), thump(0.25), 0.22)
 
     out = out / max(1e-6, np.abs(out).max()) * 0.85
     st = np.stack([out, out], 1)

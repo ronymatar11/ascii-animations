@@ -16,8 +16,9 @@ python eye_to_heart.py --export eye_v.mp4 --size 1080x1920
 ```
 
 ## 2. Code to Mona Lisa (9:16, with sound)
-Heartbeat pulse, `print("hello world")`, code fills the screen, the code talks, forms an eye,
-the eye looks at you, the camera pulls back to the Mona Lisa on a museum wall.
+`print("hello world")`, code fills the screen, the code talks and forms an eye. The iris
+forms out of code, the eye searches around, blinks and stares at you, then dissolves into the
+Mona Lisa's eye and the camera pulls back to the painting on a museum wall.
 ```
 python code_to_monalisa.py --export monalisa.mp4
 python code_to_monalisa.py --image full_painting.jpg --eye X Y   # use a bigger image
