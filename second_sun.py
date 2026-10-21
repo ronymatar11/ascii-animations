@@ -6,11 +6,11 @@ code fills the page -> the code forms the logo, and as it forms the star inside 
 starts to shine -> two hands drawn in code reach in and meet on the star -> on the
 drop it explodes into a sun with the logo stamped in it -> the sun becomes an iris,
 the camera pulls back: one big eye -> it looks around on the beat and stares at you ->
-dive into the pupil: the two dots in it grow into two moons, the second song starts ->
-a rocket comes in from out of frame and writes A SPACE ODYSSEY with its trail ->
-everything melts into the date: FRI OCT 30.
+dive into the pupil: the two dots in it grow into two moons ->
+a rocket comes in from out of frame and burns A SPACE ODYSSEY in as it passes ->
+it comes back close to the camera and its giant trail paints the date: FRI OCT 30.
 
-Export:   python second_sun.py --music track.mp3 --start 236.32 --music2 track2.mp3 --start2 19.0 --handle @you --export second_sun.mp4
+Export:   python second_sun.py --music track.mp3 --start 236.32 --handle @you --export second_sun.mp4
           (--start = where to cut the track; the drop lands 9.52s in, 5 bars at 126 BPM)
 """
 import argparse, math, subprocess
@@ -33,11 +33,11 @@ T_IRIS = DROP + 1.6 * BAR                 # the sun turns into an iris
 T_PULL = DROP + 1.8 * BAR                 # camera pulls back: it's an eye
 T_DIVE = DROP + 4.5 * BAR                 # dive into the pupil
 T_END = DROP + 5 * BAR                    # 19.05s: inside the pupil, space; the second song starts
-T_ROCKET = T_END + 0.3                    # a rocket comes in from out of frame
+T_ROCKET = T_END + 0.3                    # a rocket comes in from out of frame, writes the title
 ROCKET_DUR = 4.4
-T_TYPO = T_END + 6.2                      # everything melts into the date
-TYPO_MORPH = 1.3
-T_FOOT = T_TYPO + 2.0
+T_FLY = T_ROCKET + ROCKET_DUR - 0.7       # it comes back, close to the camera; its trail paints the date
+FLY_DUR = 3.0
+T_FOOT = T_FLY + FLY_DUR + 1.0
 
 CREAM = np.array([0.99, 0.92, 0.82], np.float32)
 GOLD = np.array([1.0, 0.82, 0.45], np.float32)
@@ -221,6 +221,8 @@ TRAIL_PATH = [(-300, 1870), (150, 1850), (560, 1800), (900, 1700), (1095, 1430),
 TRAIL_COLS = np.array([[0.88, 0.25, 0.2], [0.98, 0.52, 0.27], [1.0, 0.9, 0.78],
                        [0.62, 0.6, 0.58], [0.98, 0.66, 0.52]], np.float32)
 RED = np.array([0.92, 0.3, 0.22], np.float32)
+LETTER_COLS = np.array([[0.95, 0.28, 0.2], [1.0, 0.5, 0.25], [1.0, 0.93, 0.8], [1.0, 0.62, 0.42],
+                        [0.92, 0.22, 0.18]], np.float32)
 BIG_FONTS = ["/usr/share/fonts/opentype/inter/Inter-ExtraBold.otf", "Inter-ExtraBold.otf",
              "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", "DejaVuSans-Bold.ttf", "arialbd.ttf"]
 
@@ -248,6 +250,32 @@ def text_mask(lines, cy, height, max_w=1000, gap=0.08, cx=W / 2):
         y += lh * (1 + gap)
     a = np.asarray(hi, np.float32) / 255.0
     return a[np.clip(FGY.astype(int), 0, H - 1), np.clip(FGX.astype(int), 0, W - 1)] > 0.5
+
+def sample_path(points, step=6.0):
+    """catmull-rom through points, resampled every `step` px: positions, unit tangents, lengths"""
+    P = catmull(points, 60)
+    L = np.concatenate([[0], np.cumsum(np.hypot(*np.diff(P, axis=0).T))])
+    Ls = np.arange(0, L[-1], step)
+    path = np.stack([np.interp(Ls, L, P[:, 0]), np.interp(Ls, L, P[:, 1])], 1)
+    tg = np.gradient(path, axis=0)
+    return path, tg / (np.linalg.norm(tg, axis=1, keepdims=True) + 1e-9), Ls
+
+def nearest_on_path(X, Y, P, T, chunk=64):
+    """per cell: distance to the nearest path sample, its index, and the signed side offset"""
+    best = np.full(X.shape, 1e9); jj = np.zeros(X.shape, int); lat = np.zeros(X.shape)
+    for j in range(0, len(P), chunk):
+        ex = X[..., None] - P[None, None, j:j + chunk, 0]
+        ey = Y[..., None] - P[None, None, j:j + chunk, 1]
+        dd = np.hypot(ex, ey)
+        k = dd.argmin(-1)
+        m = np.take_along_axis(dd, k[..., None], -1)[..., 0]
+        better = m < best
+        kk = k + j
+        best = np.where(better, m, best); jj = np.where(better, kk, jj)
+        lx = np.take_along_axis(ex, k[..., None], -1)[..., 0]
+        ly = np.take_along_axis(ey, k[..., None], -1)[..., 0]
+        lat = np.where(better, T[kk, 0] * ly - T[kk, 1] * lx, lat)
+    return best, jj, lat
 
 def catmull(points, n=40):
     P = np.array(points, float)
@@ -465,6 +493,7 @@ class Show:
                              math.pi - 0.47 + 0.05 * math.sin(t * 0.9 + 2) * live, HAND_S, FINGERS_POINT, 0.55, False, fr)
         inl, inr = dl < 0, dr < 0
         hand = inl | inr
+        self.hand_mask = hand
         idx = np.where(hand, 0, idx)
         # outlines along the contour, lit by the star
         dd = np.minimum(dl, dr)
@@ -496,35 +525,128 @@ class Show:
         idx, col = self.code_logo(t, I, sc, p, dim, fi)
         if t >= T_HANDS_IN:
             idx, col = self.hands_over(idx, col, t, I)
+        return self.touch_light(idx, col, t, p)
+
+    def touch_light(self, idx, col, t, p):
+        """as the fingertips close in on the star: a growing glow, a lens-flare streak, sparks"""
+        T0 = DROP - 1.4
+        if t < T0:
+            return idx, col
+        k = float(smoother(T0, DROP, t)) ** 1.5
+        sx, sy = self.star_xy
+        dx, dy = FGX - sx, FGY - sy
+        r = np.hypot(dx / 1.4, dy)
+        glow = np.exp(-r / (8 + 75 * k)) * (0.6 + 0.9 * k) * (0.85 + 0.25 * p)
+        streak = (np.abs(dy) < FCH * 0.6) * np.exp(-np.abs(dx) / (60 + 1300 * k)) * k * 1.4
+        vstreak = (np.abs(dx) < FCW * 0.6) * np.exp(-np.abs(dy) / (30 + 330 * k)) * k * 1.2
+        diag = ((np.abs(np.abs(dx) - np.abs(dy) * FCW / FCH * 1.6) < FCW * 0.7) *
+                np.exp(-np.hypot(dx, dy) / (20 + 160 * k)) * k)
+        light = np.clip(np.maximum.reduce([glow, streak, vstreak, diag]), 0, 1.4)
+        hand = getattr(self, "hand_mask", np.zeros_like(light, bool)) if t >= T_HANDS_IN else np.zeros_like(light, bool)
+        hand = hand & (glow < 0.5)                                  # the light blooms over the fingertips
+        # sparks thrown out of the contact point
+        spark = np.zeros_like(light)
+        for i in range(140):
+            born = T0 + 1.4 * self.spark_t[i]
+            age = t - born
+            if not (0 <= age < 0.55): continue
+            a_ = self.spark_a[i]; v = self.spark_v[i] * (1 - 0.5 * age)
+            x = sx + math.cos(a_) * v * age; y = sy + math.sin(a_) * v * age * 0.6
+            rr, cc = int((y - FOY) / FCH), int(x / FCW)
+            if 0 <= rr < FROWS and 0 <= cc < FCOLS:
+                spark[rr, cc] = max(spark[rr, cc], 1 - age / 0.55)
+        col = col * (1 - 0.55 * k)                                  # the rest of the frame dims
+        lit = ((light > 0.15) | (spark > 0)) & ~hand
+        tint = (GOLD * (1 - np.clip(light, 0, 1)[..., None]) + WHITE * np.clip(light, 0, 1)[..., None])
+        val = np.maximum(light, spark)
+        g = glyphs(np.clip(val, 0, 1), int(t * 20), (FROWS, FCOLS))
+        g = np.where((streak >= glow) & (streak > 0.15), CI["-"], np.where((vstreak >= glow) & (vstreak > 0.15), CI["|"], g))
+        g = np.where((diag >= glow) & (diag > 0.15), np.where((dx * dy) > 0, CI["\\"], CI["/"]), g)
+        idx = np.where(lit, np.where(spark > 0, CI["*"], g), idx)
+        core = (glow > 0.6) & ~hand
+        idx = np.where(core, BLOCK, idx)
+        fl = ((streak > 0.5) | (vstreak > 0.5)) & ~hand & ~core
+        idx = np.where(fl & (streak > 0.5), CI["="], np.where(fl, CI["|"], idx))
+        col = np.where(lit[..., None], np.clip(tint * np.clip(0.45 + 0.9 * val, 0, 1.3)[..., None], 0, 1), col)
+        col = np.where(core[..., None], WHITE, col)
+        # white-out building into the explosion
+        f = float(sstep(DROP - 0.22, DROP, t)) * 0.85
+        col = col * (1 - f) + WHITE * f * (~hand)[..., None]
         return idx, col
 
 
     # ---------- 3. space
     def setup_space(self, rng):
-        # stars and a bit of grain, like the print
         n = 300
         self.star_rc = np.stack([rng.integers(0, FROWS, n), rng.integers(0, FCOLS, n)], 1)
         self.star_ph = rng.uniform(0, 6.3, n); self.star_sp = rng.uniform(1.5, 4.5, n)
         self.star_big = rng.random(n) < 0.06
-        # rocket path, evenly sampled by length
-        P = catmull(TRAIL_PATH, 60)
-        seg = np.hypot(*np.diff(P, axis=0).T)
-        L = np.concatenate([[0], np.cumsum(seg)])
-        self.path_L = np.arange(0, L[-1], 6.0)
-        self.path = np.stack([np.interp(self.path_L, L, P[:, 0]), np.interp(self.path_L, L, P[:, 1])], 1)
-        tg = np.gradient(self.path, axis=0)
-        self.path_T = tg / (np.linalg.norm(tg, axis=1, keepdims=True) + 1e-9)
-        # the title the rocket writes, and the date everything becomes
-        self.title = text_mask(["A SPACE", "ODYSSEY"], 1500, 320, max_w=760, cx=440, gap=0.1)
+        self.spark_t = rng.random(140) ** 0.6
+        self.spark_a = rng.uniform(0, 2 * np.pi, 140); self.spark_v = rng.uniform(250, 900, 140)
+        # first pass: along the poster's curve
+        self.path, self.path_T, self.path_L = sample_path(TRAIL_PATH)
+        # the title, burned in as the rocket sweeps along the bottom
+        self.title = text_mask(["A SPACE", "ODYSSEY"], 1470, 430, max_w=900, cx=480, gap=0.08)
+        tt = np.linspace(T_ROCKET, T_ROCKET + ROCKET_DUR, 400)
+        Ls = np.array([self.rocket_s(x) for x in tt])
+        idx_ = np.clip(np.searchsorted(self.path_L, Ls), 0, len(self.path) - 1)
+        xs = np.maximum.accumulate(np.where(self.path[idx_, 1] > 1500, self.path[idx_, 0], -999))
+        self.t_title = np.interp(FGX + 30, xs, tt, left=T_ROCKET, right=T_ROCKET + ROCKET_DUR)
+        self.title_look = self.lettering(self.title, band=np.clip((FGY - 1255) / 430, 0, 1),
+                                         along=FGX * 0.03, ang=np.zeros((FROWS, FCOLS)))
+        # the date: lines stacked, then a second, close pass of the rocket snakes through them
         self.typo = text_mask(["FRI", "OCT", "30"], 860, 1240, max_w=900, gap=0.04)
-        self.d_typo = mask_sdf(self.typo)
-        b, col, sidx, scene = self.space_layers(T_TYPO, 0)
-        self.d_scene = mask_sdf(scene)
+        rows = np.where(self.typo.any(1))[0]
+        cuts = np.split(rows, np.where(np.diff(rows) > 3)[0] + 1)
+        cy = [float(FGY[c, 0].mean()) for c in cuts[:3]]
+        y3, y2, y1 = cy[2], cy[1], cy[0]
+        fly = [(1750, y3), (1100, y3), (540, y3), (160, y3 - 8), (-80, (y3 + y2) / 2), (160, y2 + 8), (540, y2),
+               (930, y2 - 6), (1160, (y2 + y1) / 2), (930, y1 + 6), (540, y1), (120, y1), (-750, y1 - 30)]
+        self.fpath, self.fpath_T, self.fpath_L = sample_path(fly)
+        self.fly_w = 0.5 * (y3 - y2) * 0.92
+        best, jj, lat = nearest_on_path(FGX, FGY, self.fpath[::2], self.fpath_T[::2])
+        self.f_best, self.f_j, self.f_lat = best, jj * 2, lat
+        self.f_t = T_FLY + FLY_DUR * self.fpath_L[self.f_j] / self.fpath_L[-1]
+        band = np.clip((lat / self.fly_w + 1) / 2, 0, 1)
+        ang = np.arctan2(self.fpath_T[self.f_j, 1], self.fpath_T[self.f_j, 0])
+        self.typo_look = self.lettering(self.typo, band=band, along=self.fpath_L[self.f_j] * 0.01, ang=ang)
         # when the pupil's black has filled the screen, the space scene takes over (fine grid)
         self.t_space = T_END
-        for tt in np.arange(T_DIVE, T_END, 1 / FPS):
-            if self.pupil_px(tt) > 1150:
-                self.t_space = tt; break
+        for tt_ in np.arange(T_DIVE, T_END, 1 / FPS):
+            if self.pupil_px(tt_) > 1150:
+                self.t_space = tt_; break
+
+    def lettering(self, mask, band, along, ang):
+        """painted letters: the trail's stripes and brush streaks, outlines, a drop shadow"""
+        pal = LETTER_COLS
+        stripe = (np.floor(band * 5 + 0.7 * np.sin(along * 0.8 + band * 4)) % len(pal)).astype(int)
+        streak = fbm(along * 3, band * 14, 3, 67)
+        col = pal[stripe] * (0.9 + 0.25 * streak[..., None])
+        dense = RAMP[int(len(RAMP) * 0.6):]
+        g = dense[(np.clip(streak, 0, 0.999) * len(dense)).astype(int)]
+        b = 0.85 + 0.15 * streak
+        d = mask_sdf(mask)
+        gy_, gx_ = np.gradient(d, FCH, FCW)
+        edge = (d < 0) & (d > -FCW * 1.2)
+        tang = np.arctan2(gy_, gx_) + np.pi / 2
+        eg = stroke_glyph(np.arctan2(np.sin(tang) / FCH, np.cos(tang) / FCW))
+        shadow = np.roll(np.roll(mask, 2, 0), 2, 1) & ~mask & ~edge
+        return dict(mask=mask, col=col, b=b, glyph=g, edge=edge & (d > -FCW * 0.8), eglyph=eg, shadow=shadow)
+
+    def paint_letters(self, idx, col, look, t_on, t, alpha=1.0):
+        """letters appear where t >= t_on, white-hot first, cooling into their paint"""
+        on = t >= t_on
+        age = np.clip(t - t_on, 0, None)
+        hot = np.exp(-age / 0.35)[..., None]
+        shimmer = (0.88 + 0.18 * np.sin(FGX * 0.015 + FGY * 0.01 - t * 3))[..., None]
+        fill = look["mask"] & on & ~look["edge"]
+        c = np.clip((look["col"] * shimmer * (1 - hot) + np.array([1.0, 0.95, 0.85]) * hot) * alpha, 0, 1)
+        idx = np.where(fill, look["glyph"], idx)
+        col = np.where(fill[..., None], c, col)
+        e = look["edge"] & on
+        idx = np.where(e, look["glyph"], idx)
+        col = np.where(e[..., None], np.clip((np.array([1.0, 0.95, 0.85]) * (1 - hot) + WHITE * hot) * alpha * 1.1, 0, 1), col)
+        return idx, col
 
     def pupil_px(self, t):
         z = ZE * math.exp(math.log(40) * float(smoother(T_DIVE, T_END, t)) ** 2)
@@ -563,84 +685,100 @@ class Show:
         return b, col, disk
 
     def rocket_s(self, t):
-        """distance the rocket has travelled along its path"""
+        """distance the rocket has travelled along its first path"""
         x = float(smoother(T_ROCKET, T_ROCKET + ROCKET_DUR, t))
         x = 0.55 * x + 0.45 * min(max((t - T_ROCKET) / ROCKET_DUR, 0), 1)   # keeps moving through the curve
         return x * self.path_L[-1]
 
-    def space_layers(self, t, fi):
-        """fine grid: background (stars, grain) and the scene (moons, trail, rocket, title), plus scene mask"""
+    def draw_rocket(self, b, col, idx, P, D, s):
+        """rocket at P heading D, scale s (1 = far, bigger = closer to the camera)"""
+        X, Y = FGX, FGY
+        px, py = P; dx, dy = D; nx, ny = -dy, dx
+        tail = (px - dx * 95 * s, py - dy * 95 * s)
+        body = seg_sdf(X, Y, tail[0], tail[1], px + dx * 150 * s, py + dy * 150 * s, 34 * s, 6 * s)
+        fins = np.minimum(
+            seg_sdf(X, Y, tail[0] + (dx * 30 + nx * 22) * s, tail[1] + (dy * 30 + ny * 22) * s,
+                    tail[0] + (-dx * 35 + nx * 88) * s, tail[1] + (-dy * 35 + ny * 88) * s, 15 * s, 4 * s),
+            seg_sdf(X, Y, tail[0] + (dx * 30 - nx * 22) * s, tail[1] + (dy * 30 - ny * 22) * s,
+                    tail[0] + (-dx * 35 - nx * 88) * s, tail[1] + (-dy * 35 - ny * 88) * s, 15 * s, 4 * s))
+        win = np.hypot(X - (px + dx * 55 * s), Y - (py + dy * 55 * s)) < 11 * s
+        side = ((X - px) * nx + (Y - py) * ny) / (34 * s)
+        rk = (body < 0) | (fins < 0)
+        rb = np.where(fins < 0, 0.75, 0.8 - 0.25 * np.clip(side, -1, 1))
+        rc = np.where((fins < 0)[..., None], RED, np.array([0.95, 0.92, 0.86]))
+        rb = np.where(win, 0.1, rb)
+        b = np.where(rk, rb, b); col = np.where(rk[..., None], rc, col); idx = np.where(rk, 0, idx)
+        return b, col, idx, rk
+
+    def space_frame(self, t, fi):
+        """inside the pupil: moons, a rocket that burns in the title, then comes back close and paints the date"""
         X, Y = FGX, FGY
         shape = (FROWS, FCOLS)
-        # moons
+        fade = float(sstep(self.t_space, self.t_space + 0.8, t))
+        bidx, bcol = self.space_bg(t, fi)
+        bcol = bcol * fade
+        # the first scene fades away as the rocket comes back close
+        old = 1 - float(sstep(T_FLY + 0.4, T_FLY + 1.8, t))
         b, col, disk = self.moon_fields(X, Y, t, self.moon_state(t), shape)
-        scene = disk.copy()
         sidx = np.zeros(shape, np.int64)
-        # the trail, painted behind the rocket
+        # first pass trail
         Lr = self.rocket_s(t)
         n = int(np.searchsorted(self.path_L, Lr))
-        if n > 1:
-            P = self.path[:n:2]; T = self.path_T[:n:2]; Lp = self.path_L[:n:2]
-            age = Lr - Lp
+        if n > 1 and old > 0:
+            age = Lr - self.path_L[:n:2]
+            best, jj, lat = nearest_on_path(X, Y, self.path[:n:2], self.path_T[:n:2])
+            Lp = self.path_L[:n:2][jj]
             w = 16 + np.minimum(age * 0.12, 115)
-            best = np.full(shape, 1e9); lat = np.zeros(shape); jj = np.zeros(shape, int)
-            for j in range(0, len(P), 64):
-                ex = X[..., None] - P[None, None, j:j + 64, 0]
-                ey = Y[..., None] - P[None, None, j:j + 64, 1]
-                dd = np.hypot(ex, ey)
-                k = dd.argmin(-1)
-                m = np.take_along_axis(dd, k[..., None], -1)[..., 0]
-                better = m < best
-                kk = k + j
-                best = np.where(better, m, best)
-                jj = np.where(better, kk, jj)
-                lx = np.take_along_axis(ex, k[..., None], -1)[..., 0]
-                ly = np.take_along_axis(ey, k[..., None], -1)[..., 0]
-                lat = np.where(better, T[kk, 0] * ly - T[kk, 1] * lx, lat)
-            wj = w[jj] * (0.85 + 0.3 * fbm(Lp[jj] * 0.01, lat * 0.02, 2, 61))
+            wj = w[jj] * (0.85 + 0.3 * fbm(Lp * 0.01, lat * 0.02, 2, 61))
             tr = (best < wj) & (np.abs(lat) < wj)
             band = np.clip((lat / wj + 1) / 2, 0, 1)
-            stripe = (np.floor(band * 6 + 0.8 * np.sin(Lp[jj] * 0.008 + band * 4)) % 5).astype(int)
-            streak = fbm(Lp[jj] * 0.03, band * 14, 3, 67)
-            tb = 0.72 + 0.28 * streak
-            tc = TRAIL_COLS[stripe]
+            stripe = (np.floor(band * 6 + 0.8 * np.sin(Lp * 0.008 + band * 4)) % 5).astype(int)
+            streak = fbm(Lp * 0.03, band * 14, 3, 67)
             hot = np.exp(-age[jj] / 70)[..., None]
-            tc = tc * (1 - hot) + np.array([1.0, 0.95, 0.8]) * hot
-            b = np.where(tr, np.maximum(tb, b * (~disk)), b)
+            tc = TRAIL_COLS[stripe] * (1 - hot) + np.array([1.0, 0.95, 0.8]) * hot
+            b = np.where(tr, np.maximum(0.72 + 0.28 * streak, b * (~disk)), b)
             col = np.where(tr[..., None], tc, col)
-            ang = np.arctan2(T[jj, 1], T[jj, 0])
+            T = self.path_T[:n:2][jj]
+            ang = np.arctan2(T[..., 1], T[..., 0])
             sidx = np.where(tr & (streak > 0.45), stroke_glyph(np.arctan2(np.sin(ang) / FCH, np.cos(ang) / FCW)), sidx)
-            scene |= tr
-        # the title, written as the rocket sweeps past along the bottom
-        low = self.path[:n, 1] > 1500
-        reach = self.path[:n, 0][low].max() if low.any() else -999.0
-        if n > 0 and not low[-1]:
-            reach = 9999.0                                           # past the bottom sweep: all written
-        tl = self.title & (X < reach - 30)
-        b = np.where(tl, 0.92, b)
-        col = np.where(tl[..., None], RED * (0.85 + 0.25 * np.sin(X * 0.02 - t * 3))[..., None], col)
-        scene |= tl
-        # the rocket
         if 0 < Lr < self.path_L[-1]:
             i = min(n, len(self.path) - 1)
-            px, py = self.path[i]; dx, dy = self.path_T[i]
-            nx, ny = -dy, dx
-            tail = (px - dx * 95, py - dy * 95)
-            body = seg_sdf(X, Y, tail[0], tail[1], px + dx * 150, py + dy * 150, 34, 6)
-            fins = np.minimum(seg_sdf(X, Y, tail[0] + dx * 30 + nx * 22, tail[1] + dy * 30 + ny * 22,
-                                      tail[0] - dx * 35 + nx * 88, tail[1] - dy * 35 + ny * 88, 15, 4),
-                              seg_sdf(X, Y, tail[0] + dx * 30 - nx * 22, tail[1] + dy * 30 - ny * 22,
-                                      tail[0] - dx * 35 - nx * 88, tail[1] - dy * 35 - ny * 88, 15, 4))
-            win = np.hypot(X - (px + dx * 55), Y - (py + dy * 55)) < 11
-            side = ((X - px) * nx + (Y - py) * ny) / 34
-            rk = (body < 0) | (fins < 0)
-            rb = np.where(fins < 0, 0.75, 0.55 + 0.4 * np.clip(-side, -1, 1) * 0.5 + 0.25)
-            rc = np.where((fins < 0)[..., None], RED, np.array([0.95, 0.92, 0.86]))
-            rb = np.where(win, 0.1, rb)
-            b = np.where(rk, rb, b); col = np.where(rk[..., None], rc, col)
-            sidx = np.where(rk, 0, sidx)
-            scene |= rk
-        return b, col, sidx, scene
+            b, col, sidx, _ = self.draw_rocket(b, col, sidx, self.path[i], self.path_T[i], 1.0)
+        idx = np.where(sidx > 0, sidx, glyphs(np.clip(b, 0, 1), int(t * 12), shape))
+        col = np.clip(col * np.clip(0.35 + 0.8 * b, 0, 1)[..., None], 0, 1) * old
+        vis = b > 0.03
+        idx = np.where(vis & (old > 0.02), idx, bidx)
+        col = np.where((vis & (old > 0.02))[..., None], col, bcol)
+        # the title, burned in as the rocket passes
+        idx, col = self.paint_letters(idx, col, self.title_look, self.t_title, t, alpha=old)
+
+        # second pass: close to the camera, its giant trail paints the date
+        if t >= T_FLY:
+            Lf = self.fpath_L[-1] * float(min(max((t - T_FLY) / FLY_DUR, 0), 1))
+            ft = (self.f_best < self.fly_w * (0.9 + 0.2 * self.frand)) & (self.f_t <= t)
+            age_t = t - self.f_t
+            alpha = 1 - sstep(0.25, 0.9, age_t)
+            on = ft & (alpha > 0.02)
+            band = np.clip((self.f_lat / self.fly_w + 1) / 2, 0, 1)
+            stripe = (np.floor(band * 6 + 0.8 * np.sin(self.fpath_L[self.f_j] * 0.008 + band * 4)) % 5).astype(int)
+            streak = fbm(self.fpath_L[self.f_j] * 0.02, band * 14, 3, 71)
+            hotf = np.exp(-age_t / 0.12)[..., None]
+            tc = TRAIL_COLS[stripe] * (1 - hotf) + np.array([1.0, 0.95, 0.85]) * hotf
+            tb = (0.7 + 0.3 * streak) * alpha
+            ang = np.arctan2(self.fpath_T[self.f_j, 1], self.fpath_T[self.f_j, 0])
+            g = np.where(streak > 0.42, stroke_glyph(np.arctan2(np.sin(ang) / FCH, np.cos(ang) / FCW)),
+                         glyphs(np.clip(tb, 0, 1), int(t * 12), shape))
+            idx = np.where(on, g, idx)
+            col = np.where(on[..., None], np.clip(tc * np.clip(0.35 + 0.8 * tb, 0, 1)[..., None], 0, 1), col)
+            # what the trail leaves behind: the date, in the trail's own paint
+            idx, col = self.paint_letters(idx, col, self.typo_look, np.where(self.typo, self.f_t + 0.15, np.inf), t)
+            if Lf < self.fpath_L[-1]:
+                i = min(int(np.searchsorted(self.fpath_L, Lf)), len(self.fpath) - 1)
+                rb, rc, ridx, rk = self.draw_rocket(np.zeros(shape), np.zeros(shape + (3,)), np.zeros(shape, np.int64),
+                                                    self.fpath[i], self.fpath_T[i], 2.6)
+                idx = np.where(rk, glyphs(np.clip(rb, 0, 1), int(t * 12), shape), idx)
+                col = np.where(rk[..., None], np.clip(rc * np.clip(0.35 + 0.8 * rb, 0, 1)[..., None], 0, 1), col)
+        return idx, col.astype(np.float32)
 
     def space_bg(self, t, fi):
         idx = np.zeros((FROWS, FCOLS), np.int64); col = np.zeros((FROWS, FCOLS, 3), np.float32)
@@ -661,40 +799,6 @@ class Show:
             else:
                 idx[r, c] = CI["." if v < 0.5 else "*"]; col[r, c] = c_
         return idx, col
-
-    def typo_layer(self, t):
-        cols = np.arange(FCOLS)[None, :]
-        lci = (cols + np.floor(self.logo_v * t).astype(int)[:, None]) % FCOLS
-        idx = np.where(self.typo, np.take_along_axis(self.logo_idx, lci, 1), 0)
-        grad = np.clip((FGY - 280) / 1200, 0, 1)[..., None]
-        shimmer = (0.85 + 0.25 * np.sin(FGX * 0.015 + FGY * 0.008 - t * 3.5))[..., None]
-        col = (np.array([1.0, 0.36, 0.26]) * (1 - grad) + np.array([1.0, 0.62, 0.34]) * grad) * shimmer * 1.15
-        return idx, np.clip(col, 0, 1).astype(np.float32)
-
-    def space_frame(self, t, fi):
-        """inside the pupil: the moons, the rocket and its trail, the title; then all of it melts into the date"""
-        fade = float(sstep(self.t_space, self.t_space + 0.8, t))
-        bidx, bcol = self.space_bg(t, fi)
-        bcol = bcol * fade
-        b, col, sidx, scene = self.space_layers(t, fi)
-        sg = glyphs(np.clip(b, 0, 1), int(t * 12), (FROWS, FCOLS))
-        sg = np.where(sidx > 0, sidx, sg)
-        sc = np.clip(col * np.clip(0.35 + 0.8 * b, 0, 1)[..., None], 0, 1)
-        vis = b > 0.03
-        a = float(smoother(T_TYPO, T_TYPO + TYPO_MORPH, t))
-        if a <= 0:
-            return np.where(vis, sg, bidx), np.where(vis[..., None], sc, bcol)
-        tidx, tcol = self.typo_layer(t)
-        inside = (self.d_scene * (1 - a) + self.d_typo * a) < 0
-        from_scene = inside & vis & (self.frand >= a)
-        idx = np.where(inside, np.where(from_scene, sg, tidx), bidx)
-        base = np.where(vis[..., None], sc, RED * 0.6)
-        col = np.where(inside[..., None], base * (1 - a) + tcol * a, bcol)
-        if a < 1:   # what's outside the melting shape keeps shining, fading out
-            keep = ~inside & vis & (self.frand >= a)
-            idx = np.where(keep, sg, idx)
-            col = np.where(keep[..., None], sc * (1 - a), col)
-        return idx, col.astype(np.float32)
 
     def gaze(self, t):
         gx = gy = 0.0
@@ -868,22 +972,12 @@ class Show:
         return (img * g).astype(np.uint8) if g < 1 else img
 
 
-def export(path, music, start, handle, music2=None, start2=0.0):
+def export(path, music, start, handle):
     show = Show(handle)
     ff = ffmpeg_bin()
     cmd = [ff, "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W}x{H}",
            "-r", str(FPS), "-i", "-"]
-    xf = 0.3
-    if music and music2:
-        # first track until we're inside the pupil, then a short crossfade into the second
-        cmd += ["-ss", str(start), "-t", str(T_END + xf / 2), "-i", music,
-                "-ss", str(start2), "-t", str(DUR - T_END + xf / 2), "-i", music2,
-                "-filter_complex",
-                "[1:a]aformat=sample_rates=44100:channel_layouts=stereo,afade=t=in:d=0.05[a1];"
-                "[2:a]aformat=sample_rates=44100:channel_layouts=stereo[a2];"
-                f"[a1][a2]acrossfade=d={xf}[ax];[ax]afade=t=out:st={DUR - 1.2}:d=1.2[a]",
-                "-map", "0:v", "-map", "[a]", "-c:a", "aac", "-b:a", "192k"]
-    elif music:
+    if music:
         cmd += ["-ss", str(start), "-t", str(DUR), "-i", music,
                 "-af", f"afade=t=in:d=0.05,afade=t=out:st={DUR - 1.5}:d=1.5", "-c:a", "aac", "-b:a", "192k"]
     cmd += ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "17", "-preset", "medium", "-shortest", path]
@@ -901,8 +995,6 @@ if __name__ == "__main__":
     ap.add_argument("--export", default="second_sun.mp4")
     ap.add_argument("--music", default=None, help="audio file to cut the video to")
     ap.add_argument("--start", type=float, default=236.32, help="seconds into the track to start (drop lands 9.52s later)")
-    ap.add_argument("--music2", default=None, help="second track, from the moment we're inside the pupil")
-    ap.add_argument("--start2", type=float, default=19.0, help="seconds into the second track to start")
     ap.add_argument("--handle", default="@yourhandle")
     a = ap.parse_args()
-    export(a.export, a.music, a.start, a.handle, a.music2, a.start2)
+    export(a.export, a.music, a.start, a.handle)
