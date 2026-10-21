@@ -2,11 +2,12 @@
 2ND SUN  |  stage visual concept, 9:16, cut to music. Every frame is text, no cuts:
 each scene is transformed out of the one before it.
 
-the star inside the logo starts to shine -> the riser pulls the logo's characters
-into it -> break: only the star -> drop: the star bursts into a sun with the logo
-stamped in it -> the sun becomes an iris, the camera pulls back: one big eye ->
-it looks around on the beat -> dive into the pupil -> out of the dark, two hands
-drawn in code reach for each other, the star sparks between them -> let's work together.
+code fills the page -> the code forms the logo, and as it forms the star inside it
+starts to shine -> two hands drawn in code reach in and meet on the star -> on the
+drop it explodes into a sun with the logo stamped in it -> the sun becomes an iris,
+the camera pulls back: one big eye -> it looks around on the beat and stares at you ->
+dive into the pupil -> out of the black the code fills the page and forms the logo
+again -> let's work together.
 
 Export:   python second_sun.py --music track.mp3 --start 236.32 --handle @you --export second_sun.mp4
           (--start = where to cut the track; the drop lands 9.52s in, 5 bars at 126 BPM)
@@ -16,7 +17,8 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from code_to_monalisa import (W, H, CW, CH, COLS, ROWS, OY, CI, CHARS, BLOCK, PRINTABLE, RAMP,
-                              sstep, smoother, fbm, find_font, compose, render, to_glyphs, ffmpeg_bin)
+                              sstep, smoother, fbm, find_font, compose, render, to_glyphs, ffmpeg_bin,
+                              colorize)
 
 FPS = 30
 DUR = 25.0
@@ -24,18 +26,32 @@ BPM = 126.05
 BEAT = 60 / BPM
 BAR = 4 * BEAT
 DROP = 5 * BAR                            # 9.52s: the kick comes back
-BREAK = DROP - BAR                        # 7.62s: only the star is left
+BREAK = DROP - BAR                        # 7.62s: the riser stops, the hands close in
+T_HANDS_IN = 4.6                          # the hands start reaching for the star
 T_IRIS = DROP + 1.6 * BAR                 # the sun turns into an iris
 T_PULL = DROP + 1.8 * BAR                 # camera pulls back: it's an eye
-T_DIVE = DROP + 3.5 * BAR                 # dive into the pupil
-T_HANDS = DROP + 4 * BAR                  # 17.14s: hands out of the dark
-T_SPARK = T_HANDS + 2 * BAR               # fingertips meet on a downbeat
+T_DIVE = DROP + 4.5 * BAR                 # dive into the pupil
+T_END = DROP + 5 * BAR                    # 19.05s: out of the black, the code again
+T_CARD = T_END + 2.1                      # let's work together
 
 CREAM = np.array([0.99, 0.92, 0.82], np.float32)
 GOLD = np.array([1.0, 0.82, 0.45], np.float32)
 EMBER = np.array([1.0, 0.45, 0.12], np.float32)
 WHITE = np.array([1.0, 0.97, 0.92], np.float32)
 SOFT_SET = ".,:;-=+*#"
+
+POOL = [
+    "import stage", "from sun import light, heat", "bpm = 126", "for beat in set: sun.rise(beat)",
+    "def drop(): return light * 2", "while crowd.alive: pulse()", "stage.load('2ND SUN')",
+    "kick = sin(t * bpm / 60 * tau)", "if beat % 4 == 0: flash()", "lasers.aim(crowd, spread=0.3)",
+    "class Sun(Star):", "self.heat = 5778  # kelvin", "return [l for l in lights if l.on]",
+    "fog.density += 0.02", "await sunrise()", "const second = new Sun();", "led.wall.fill(code)",
+    "# every frame is text", "def reach(you): return light", "for x in range(W):",
+    "px[y][x] = ramp[int(lum * n)]", "eye = Eye(iris=sun)", "hands.meet(at=star)",
+    "if drop: explode(star)", "SELECT * FROM nights WHERE sun = 2;", "0x2d 0x53 0x55 0x4e",
+    "git commit -m 'second sun'", "npm run stage", "ctx.fillText(chr, x, y);", "glow = 1 / (1 + r * r)",
+    "mix(gold, ember, t)", "sync(track='your love')", "frame = render(scene, cam)",
+]
 
 PX = (np.arange(COLS) + 0.5) * CW
 PY = (np.arange(ROWS) + 0.5) * CH + OY
@@ -57,6 +73,8 @@ EU = 330.0                                # px per eye unit at zoom 1
 IRIS_R = 0.5
 SUN_R = 480.0                             # sun radius in px; the eye starts zoomed so its iris is the sun
 Z0 = SUN_R / (IRIS_R * EU)
+# hands: wrists at the end of their reach (fingertips on the star) and size
+HAND_L, HAND_R, HAND_S = (189.0, 1113.0), (890.0, 775.0), 1.9
 ZE = 1.25                                 # zoom once the eye is revealed
 
 def kick(t):
@@ -168,17 +186,18 @@ class Show:
         m = np.asarray(Image.open("assets/2ndsun_logo_mask.png").convert("L"), np.float32) / 255.0
         self.mask = m
         self.mh, self.mw = m.shape
-        self.logo = self.logo_field(LOGO_CX, LOGO_CY, LOGO_W)
-        self.logo_sun = self.logo_field(540, 960, 760)
+        self.logo_sun = self.logo_field(GX, GY, 540, 960, 760)
+        self.flogo = self.logo_field(FGX, FGY, LOGO_CX, LOGO_CY, LOGO_W)
         lw = LOGO_W / self.mw
         self.star_xy = (LOGO_CX + (STAR_M[0] - self.mw / 2) * lw, LOGO_CY + (STAR_M[1] - self.mh / 2) * lw)
         self.star_ab = (STAR_A * lw, STAR_B * lw)
         sx, sy = self.star_xy
-        rs = np.hypot(GX - sx, (GY - sy) * 1.3)
         R = self.rand = rng.random((ROWS, COLS))
         self.glyph_rand = rng.choice(PRINTABLE, (ROWS, COLS))
-        # the riser pulls the logo into the star, nearest characters first
-        self.T_absorb = 5.4 + 1.9 * np.clip(rs / 560, 0, 1) + 0.2 * R
+        self.build_page(rng)
+        # the code forms the logo outward from the star
+        rs = np.hypot(FGX - sx, (FGY - sy) * 1.3)
+        self.T_form = 2.7 + 2.3 * np.clip(rs / 620, 0, 1) + 0.25 * rng.random((FROWS, FCOLS))
         # the logo is stamped into the sun on the drop, and melts back into it
         self.T_stamp = DROP + 0.15 + 0.45 * R
         self.T_melt = T_IRIS - 0.6 + 0.5 * R
@@ -188,6 +207,7 @@ class Show:
         # gaze keyframes on the beat after the eye is revealed: (time, x, y)
         b = lambda n: DROP + n * BEAT
         self.gaze_kf = [(b(10), -0.2, 0.03), (b(12), 0.21, -0.02), (b(13), 0.06, 0.07), (b(14), 0.0, 0.0)]
+        self.T_blink = b(15.5)
         self.lashes = []
         for xr in np.linspace(-1.12, 1.18, 46):
             xr = xr + rng.uniform(-0.015, 0.015)
@@ -202,10 +222,42 @@ class Show:
         self.rain_speed = rng.uniform(14, 30, FCOLS)
         self.rain_phase = rng.uniform(0, 40, FCOLS)
 
-    def logo_field(self, cx, cy, width):
+    def build_page(self, rng):
+        """a page of code on the fine grid: what each cell says, its color, when it gets typed"""
+        idx = np.zeros((FROWS, FCOLS), np.int64)
+        col = np.zeros((FROWS, FCOLS, 3), np.float32)
+        tt = np.full((FROWS, FCOLS), np.inf)
+        segs = []
+        for r in range(FROWS):
+            x = int(rng.integers(0, 3))
+            while x < FCOLS - 4:
+                e = min(FCOLS, x + int(rng.integers(14, 48)))
+                segs.append((r, x, e))
+                x = e + int(rng.integers(1, 4))
+        order = rng.permutation(len(segs))
+        for rank, si in enumerate(order):
+            r, a, e = segs[si]
+            start = 0.12 + 2.4 * (rank / len(segs)) ** 0.65 + rng.uniform(0, 0.15)
+            speed = rng.uniform(45, 130)
+            txt = ""
+            while len(txt) < e - a:
+                txt += POOL[int(rng.integers(len(POOL)))] + ("  " if rng.random() < 0.3 else " ")
+            txt = txt[:e - a]
+            idx[r, a:e] = [CI.get(ch, 0) for ch in txt]
+            col[r, a:e] = colorize(txt)
+            tt[r, a:e] = start + np.arange(e - a) / speed
+        idx[idx == CI[" "]] = 0
+        self.page_idx, self.page_col, self.page_t = idx, col, tt
+        self.fglyph_rand = rng.choice(PRINTABLE, (FROWS, FCOLS))
+        # inside the logo, thin glyphs are swapped for dense ones so the letters read as solid
+        dense = RAMP[int(len(RAMP) * 0.55):]
+        thin = np.isin(idx, RAMP[:int(len(RAMP) * 0.55)]) | (idx == 0)
+        self.logo_idx = np.where(thin, rng.choice(dense, (FROWS, FCOLS)), idx)
+
+    def logo_field(self, gx, gy, cx, cy, width):
         s = self.mw / width
-        u = (GX - cx) * s + self.mw / 2
-        v = (GY - cy) * s + self.mh / 2
+        u = (gx - cx) * s + self.mw / 2
+        v = (gy - cy) * s + self.mh / 2
         ok = (u >= 0) & (u < self.mw - 1) & (v >= 0) & (v < self.mh - 1)
         ui, vi = np.clip(u.astype(int), 0, self.mw - 2), np.clip(v.astype(int), 0, self.mh - 2)
         fu, fv = np.clip(u - ui, 0, 1), np.clip(v - vi, 0, 1)
@@ -224,62 +276,117 @@ class Show:
         idx[mask] = rng.choice(PRINTABLE, int(mask.sum()))
         col[mask] = color
 
-    # ---------- 1. the star inside the logo starts to shine, swallows the logo, break
+    # ---------- 1. code fills the page, forms the logo, the star lights up, the hands meet on it
     def star_light(self, t):
-        """intensity, scale and pulse of the star from the first frame to the drop"""
-        I = 0.3 * float(sstep(0.1, 0.9, t)) + 0.7 * float(smoother(0.9, BREAK + 0.6, t))
+        """intensity, scale and pulse of the star: it wakes up as the logo forms"""
+        I = 0.35 * float(sstep(2.7, 3.6, t)) + 0.65 * float(smoother(3.6, DROP, t))
         if t < BREAK:
-            p = 0.4 * math.exp(-(t % BEAT) / 0.12) * float(sstep(1.0, 3.0, t))
+            p = 0.4 * math.exp(-(t % BEAT) / 0.12) * float(sstep(3.0, 4.5, t))
         else:
             v = (t - BREAK) / BAR
             p = math.exp(-((t - BREAK) % (BEAT / (1 + int(v * 3)))) / 0.12)
-        sc = 0.75 + 0.55 * I + 0.12 * p
-        return I, sc, p
+        return I, 0.75 + 0.5 * I + 0.12 * p, p
 
-    def pre_drop(self, t, fi):
-        I, sc, p = self.star_light(t)
+    def code_logo(self, tl, I, sc, p, dim, fi):
+        """fine grid: the page of code at typing time tl, the logo formed out of it, the star's light"""
         sx, sy = self.star_xy
-        dx, dy = GX - sx, GY - sy
+        dt = tl - self.page_t
+        typed = dt >= 0
+        idx = np.where(typed, self.page_idx, 0)
+        fresh = np.exp(-np.clip(dt, 0, None) / 0.1)[..., None]
+        col = self.page_col * (1 - fresh) + fresh
+        head = (dt < 0) & (dt > -0.025)
+        idx = np.where(head, BLOCK, idx)
+        col = np.where(head[..., None], np.array([0.8, 0.82, 0.85]), col)
+
+        # the logo forms out of the code; outside it the code steps back
+        dx, dy = FGX - sx, FGY - sy
         r = np.hypot(dx, dy)
-        ang = np.arctan2(dy, dx)
-        a, bb = self.star_ab
-        d = star_sdf(dx, dy, a * sc, bb * sc)
-        star = d < 0
-        # light: soft glow, long arms along the star's axes, thin code rays all around
-        glow = np.exp(-np.hypot(dx / 1.8, dy) / (18 + 110 * I)) * I * (0.85 + 0.3 * p)
-        arms = (np.exp(-np.abs(dy) / 7) * np.exp(-np.abs(dx) / (90 + 650 * I)) +
-                np.exp(-np.abs(dx) / 5) * np.exp(-np.abs(dy) / (50 + 380 * I))) * I * (0.8 + 0.4 * p)
-        rays = np.clip(np.cos(ang * 9 + t * 0.5), 0, 1) ** 10 * np.exp(-r / (80 + 520 * I)) * I
-        light = np.maximum(np.maximum(glow, arms), 0.85 * rays)
-        sm = self.smoke(t, float(sstep(0.0, 0.8, t)) * (1 - float(sstep(6.4, BREAK, t))))
-        b = np.maximum(sm, light)
-        col = np.where((light > sm)[..., None], GOLD * (1 - glow[..., None]) + WHITE * glow[..., None],
-                       np.array([0.85, 0.82, 0.78], np.float32))
-        # the logo, lit by the star, until the riser pulls it in
-        L = self.logo > 0.5
-        here = L & (t < self.T_absorb)
-        heat = np.clip(np.exp(-r / (120 + 380 * I)) * I * 1.4, 0, 1)
-        b = np.where(here, 0.55 + 0.35 * self.logo + 0.25 * heat, b)
-        lc = CREAM * (1 - heat[..., None]) + GOLD * heat[..., None]
-        col = np.where(here[..., None], lc, col)
-        b = np.where(star, 1.0, b)
-        col = np.where(star[..., None], WHITE, col)
-        idx = to_glyphs(np.clip(b, 0, 1), int(t * 12))
-        col = col * np.clip(0.3 + 0.85 * b, 0, 1)[..., None]
-        # rays are drawn as strokes pointing at the star
-        ray_c = (rays > 0.3) & ~here & ~star & (rays > glow)
-        idx = np.where(ray_c, stroke_glyph(ang), idx)
-        # characters flying into the star
-        fly = L & (t >= self.T_absorb) & (t < self.T_absorb + 0.45)
-        rr, cc = np.nonzero(fly)
+        L = self.flogo > 0.5
+        formed = tl >= self.T_form
+        lg = L & formed
+        heat = np.clip(np.exp(-r / (140 + 420 * I)) * I * 1.3, 0, 1)[..., None]
+        pop = np.exp(-np.clip(tl - self.T_form, 0, None) / 0.18)[..., None]
+        lc = (CREAM * (1 - heat) + GOLD * heat) * (1 + 0.5 * pop)
+        idx = np.where(lg, self.logo_idx, idx)
+        col = np.where(lg[..., None], lc, col)
+        grey = col.mean(-1, keepdims=True) * np.array([0.8, 0.85, 1.0])
+        col = np.where((~L & formed)[..., None], (col * 0.4 + grey * 0.6) * dim, col)
+        flip = L & (tl >= self.T_form - 0.08) & (tl < self.T_form)
+        rng = np.random.default_rng(fi)
+        idx[flip] = rng.choice(PRINTABLE, int(flip.sum()))
+        col[flip] = (0.75, 0.95, 1.0)
+
+        # the star's light: glow, long arms along its axes, thin rays, warming the code it touches
+        if I > 0:
+            a, bb = self.star_ab
+            star = star_sdf(dx, dy, a * sc, bb * sc) < 0
+            ang = np.arctan2(dy, dx)
+            glow = np.exp(-np.hypot(dx / 1.8, dy) / (14 + 95 * I)) * I * (0.85 + 0.3 * p)
+            arms = (np.exp(-np.abs(dy) / 6) * np.exp(-np.abs(dx) / (80 + 650 * I)) +
+                    np.exp(-np.abs(dx) / 4) * np.exp(-np.abs(dy) / (45 + 380 * I))) * I * (0.8 + 0.4 * p)
+            rays = np.clip(np.cos(ang * 9 + tl * 0.5), 0, 1) ** 10 * np.exp(-r / (80 + 520 * I)) * I
+            light = np.clip(np.maximum(np.maximum(glow, arms), 0.85 * rays), 0, 1)
+            lcol = GOLD * (1 - glow[..., None]) + WHITE * glow[..., None]
+            text = idx > 0
+            col = np.where(text[..., None], np.clip(col + lcol * light[..., None] * 0.9, 0, 1), col)
+            lit = ~text & (light > 0.1)
+            idx = np.where(lit, glyphs(light, int(tl * 12), (FROWS, FCOLS)), idx)
+            col = np.where(lit[..., None], lcol * np.clip(0.3 + 0.85 * light, 0, 1)[..., None], col)
+            ray = (rays > 0.3) & ~lg & ~star & (rays > glow)
+            idx = np.where(ray, stroke_glyph(ang), idx)
+            idx = np.where(star, glyphs(np.ones_like(light), int(tl * 12), (FROWS, FCOLS)), idx)
+            col = np.where(star[..., None], WHITE, col)
+        return idx, np.clip(col, 0, 1).astype(np.float32)
+
+    def hands_over(self, idx, col, t, I):
+        """two hands drawn in code reach in and meet on the star on the drop"""
+        u = t - T_HANDS_IN
+        m = float(smoother(T_HANDS_IN, DROP - 0.04, t))
+        sx, sy = self.star_xy
+        dl, tip_l = hand_sdf(FGX, FGY, HAND_L[0] - 470 * (1 - m), HAND_L[1] + 215 * (1 - m), -0.42, HAND_S, FINGERS_OPEN, 1.0, True)
+        dr, tip_r = hand_sdf(FGX, FGY, HAND_R[0] + 470 * (1 - m), HAND_R[1] - 215 * (1 - m), math.pi - 0.47, HAND_S, FINGERS_POINT, 0.55, False)
+        inl, inr = dl < 0, dr < 0
+        hand = inl | inr
+        idx = np.where(hand, 0, idx)
+        # outlines along the contour, lit by the star
+        dd = np.minimum(dl, dr)
+        gy_, gx_ = np.gradient(dd, FCH, FCW)
+        edge = (dd > -FCW * 0.9) & (dd < FCW * 1.3)
+        tang = np.arctan2(gy_, gx_) + np.pi / 2
+        idx = np.where(edge, stroke_glyph(np.arctan2(np.sin(tang) / FCH, np.cos(tang) / FCW)), idx)
+        n_len = np.hypot(gx_, gy_) + 1e-6
+        to_x, to_y = sx - FGX, sy - FGY
+        to_len = np.hypot(to_x, to_y) + 1e-6
+        facing = np.clip((gx_ * to_x + gy_ * to_y) / (n_len * to_len), 0, 1)
+        near = np.exp(-to_len / 500)
+        rim = (GOLD * (0.45 + 0.55 * facing[..., None]) * (0.6 + 0.4 * near[..., None]) +
+               np.array([0.35, 0.33, 0.32]) * (1 - facing[..., None])) * (0.65 + 0.45 * I)
+        col = np.where(edge[..., None], np.clip(rim, 0, 1), col)
+        # my hand is made of code: sparse code rain inside the silhouette
+        rr, cc = np.nonzero(inl & ~edge)
         if len(rr):
-            f = ((t - self.T_absorb[rr, cc]) / 0.45) ** 2
-            tr = (rr + ((sy - OY) / CH - 0.5 - rr) * f).round().astype(int)
-            tc = (cc + (sx / CW - 0.5 - cc) * f).round().astype(int)
-            ok = (tr >= 0) & (tr < ROWS) & (tc >= 0) & (tc < COLS)
-            idx[tr[ok], tc[ok]] = self.glyph_rand[rr[ok], cc[ok]]
-            col[tr[ok], tc[ok]] = (GOLD * 0.6 + WHITE * 0.4) * (0.6 + 0.4 * f[ok, None])
-        return idx, col.astype(np.float32)
+            ph = (rr - u * self.rain_speed[cc] - self.rain_phase[cc]) % 30
+            vis = ph < 5
+            rr, cc, ph = rr[vis], cc[vis], ph[vis]
+            idx[rr, cc] = [CI.get(self.code_rows[r][c % 90], 0) for r, c in zip(rr, cc)]
+            col[rr, cc] = np.array([1.0, 0.72, 0.45])[None] * (0.2 + 0.55 * (1 - ph[:, None] / 5))
+        return idx, col
+
+    def pre_frame(self, t, fi):
+        I, sc, p = self.star_light(t)
+        dim = 0.24 - 0.1 * float(sstep(BREAK - 0.5, DROP, t))
+        idx, col = self.code_logo(t, I, sc, p, dim, fi)
+        if t >= T_HANDS_IN:
+            idx, col = self.hands_over(idx, col, t, I)
+        return idx, col
+
+    def end_frame(self, t, fi):
+        """out of the black: the code fills the page again, twice as fast, and forms the logo"""
+        k = kick(t) * (1 - float(sstep(DUR - 3, DUR - 1, t)))
+        tl = min((t - T_END) * 2.6, 7.0)
+        I = (0.55 + 0.08 * math.sin(t * 2.2)) * float(sstep(T_END + 0.6, T_END + 1.6, t))
+        return self.code_logo(tl, I, 1.0 + 0.12 * k, k, 0.24, fi)
 
     # ---------- 2. sun -> iris -> eye -> pupil
     def gaze(self, t):
@@ -296,7 +403,7 @@ class Show:
         # camera: starts so close the iris fills the screen as the sun, pulls back, then dives into the pupil
         kp = float(smoother(T_PULL, T_PULL + 1.1, t))
         z = math.exp(math.log(Z0) * (1 - kp) + math.log(ZE) * kp)
-        z *= math.exp(math.log(40) * float(smoother(T_DIVE, T_HANDS, t)) ** 2)
+        z *= math.exp(math.log(40) * float(smoother(T_DIVE, T_END, t)) ** 2)
         e = 1 - math.exp(-u / 0.1)
         cx = self.star_xy[0] + (540 - self.star_xy[0]) * e
         cy = self.star_xy[1] + (960 - self.star_xy[1]) * e
@@ -307,14 +414,15 @@ class Show:
         grow = (230 + (SUN_R - 230) * (1 - math.exp(-u / 0.12))) / SUN_R
         Rr = IRIS_R * grow * (1 + 0.035 * k * (1 - float(sstep(T_IRIS, T_PULL, t))))
         rp = Rr * (0.34 * float(smoother(T_IRIS - 0.3, T_IRIS + 0.5, t)) + 0.03 * k * float(sstep(T_PULL, T_PULL + 0.5, t)))
-        rp += Rr * 0.5 * float(smoother(T_DIVE, T_HANDS - 0.2, t))
+        rp += Rr * 0.07 * float(smoother(DROP + 14 * BEAT, DROP + 17 * BEAT, t))      # it sees you
+        rp += Rr * 0.5 * float(smoother(T_DIVE, T_END - 0.2, t))
         dx, dy = X - gx, Y - gy
         d = np.hypot(dx, dy)
         ang = np.arctan2(dy, dx)
         Rpx = Rr * EU * z
 
         # eyelids (in eye units)
-        bl = math.exp(-((t - (DROP + 11.5 * BEAT)) / 0.07) ** 2)
+        bl = math.exp(-((t - self.T_blink) / 0.07) ** 2)
         op = 1 - bl
         ex = 1.3
         sx_ = np.clip(1 - (X / ex) ** 2, 0, 1)
@@ -415,90 +523,14 @@ class Show:
                     col[j, i] = np.array([1.0, 0.80, 0.62]) * (0.85 - 0.5 * f) * on
         return idx, col.astype(np.float32)
 
-    # ---------- 3. out of the dark: hands (fine grid)
-    def hands(self, t):
-        u = t - T_HANDS
-        k = kick(t) * (1 - float(sstep(DUR - 3, DUR - 1, t)))
-        X, Y = FGX, FGY
-        dawn = float(smoother(0.0, 1.2, u))                 # light rises out of the pupil's black
-        glow = np.exp(-(((X - 560) / 800) ** 2 + ((Y - 1500) / 1100) ** 2))
-        b = (0.10 + 0.42 * glow + 0.05 * k + 0.04 * fbm(X / 120, Y / 120 + u * 0.2, 2, 7)) * dawn
-        lit = (0.55 + 0.75 * glow + 0.15 * k)[..., None]
-        col = (np.array([0.80, 0.22, 0.06]) * (1 - glow[..., None]) +
-               np.array([1.0, 0.62, 0.24]) * glow[..., None]) * lit
-
-        m = float(smoother(0.0, T_SPARK - T_HANDS, u))
-        drift = 6 * math.sin(u * 1.3)
-        dl, tip_l = hand_sdf(X, Y, 165 - 420 * (1 - m), 1218 + 190 * (1 - m) + drift, -0.42, 2.3, FINGERS_OPEN, 1.0, True)
-        dr, tip_r = hand_sdf(X, Y, 1026 + 420 * (1 - m), 812 - 190 * (1 - m) - drift, math.pi - 0.47, 2.3, FINGERS_POINT, 0.55, False)
-        dd = np.minimum(dl, dr)
-        inl, inr = dl < 0, dr < 0
-        hand = inl | inr
-        b = np.where(hand, 0.0, b)
-
-        # the spark: their star, born where the fingertips meet
-        sx, sy = (tip_l[0] + tip_r[0]) / 2, (tip_l[1] + tip_r[1]) / 2
-        v = t - T_SPARK
-        star = np.zeros_like(hand)
-        sc = 0.0
-        if v > 0:
-            sc = 1.6 * (1 - math.exp(-v / 0.08)) * (1 + 0.35 * math.exp(-v / 0.25)) * (1 + 0.1 * k)
-            d = star_sdf(X - sx, Y - sy, 30 * sc, 25 * sc)
-            star = d < 0
-            halo = np.exp(-np.hypot((X - sx) / 1.8, Y - sy) / (28 + 12 * k)) * (0.7 + 0.3 * math.exp(-v / 0.5)) * sc
-            wave = np.exp(-((np.hypot(X - sx, Y - sy) - v * 900) / 40) ** 2) * math.exp(-v / 0.8)
-            add = np.where(hand, 0, halo + 0.5 * wave)
-            b = np.where(star, 1.0, np.maximum(b, add))
-            col = np.where(star[..., None] | (add > 0.35)[..., None], WHITE, col)
-
-        # quiet ramp for the backlight, full ramp only for the brightest light
-        jr = np.random.default_rng(int(t * 10)).integers(-1, 2, (FROWS, FCOLS))
-        idx = SOFT[np.clip((np.clip(b, 0, 1) * 1.6 * (len(SOFT) - 1)).astype(int) + jr, 0, len(SOFT) - 1)]
-        idx = np.where(b < 0.03, 0, idx)
-        idx = np.where((b > 0.6) | star, glyphs(np.clip(b, 0, 1), int(t * 10), (FROWS, FCOLS)), idx)
-        col = np.clip(col * np.clip(0.55 + 0.6 * b, 0, 1)[..., None], 0, 1)
-
-        # outlines drawn along the contour, lit from the glow behind
-        gy_, gx_ = np.gradient(dd, FCH, FCW)
-        edge = (dd > -FCW * 0.6) & (dd < FCW * 0.9)
-        tang = np.arctan2(gy_, gx_) + np.pi / 2
-        idx = np.where(edge, stroke_glyph(np.arctan2(np.sin(tang) / FCH, np.cos(tang) / FCW)), idx)
-        n_len = np.hypot(gx_, gy_) + 1e-6
-        facing = np.clip(0.5 + 0.5 * (gy_ / n_len), 0, 1)   # normals facing down catch the glow
-        rimc = (np.array([1.0, 0.72, 0.42]) * (0.35 + 0.65 * facing[..., None]) +
-                np.array([0.25, 0.22, 0.2]) * (1 - facing[..., None])) * (0.4 + 0.6 * dawn)
-        col = np.where(edge[..., None], rimc, col)
-
-        # my hand is made of code: sparse code rain inside the silhouette
-        rr, cc = np.nonzero(inl & ~edge & ~star)
-        if len(rr):
-            ph = (rr - u * self.rain_speed[cc] - self.rain_phase[cc]) % 30
-            vis = ph < 5
-            rr, cc, ph = rr[vis], cc[vis], ph[vis]
-            idx[rr, cc] = [CI.get(self.code_rows[r][c % 90], 0) for r, c in zip(rr, cc)]
-            col[rr, cc] = np.array([1.0, 0.72, 0.45])[None] * (0.2 + 0.55 * (1 - ph[:, None] / 5)) * dawn
-
-        # sparkle arms so it reads as their star
-        if v > 0:
-            r0 = int(round((sy - FOY) / FCH - 0.5)); c0 = int(round(sx / FCW - 0.5))
-            for dc in range(-int(40 * sc), int(40 * sc) + 1):
-                f = 1 - abs(dc) / (40 * sc + 1)
-                if 0 <= c0 + dc < FCOLS and abs(dc) > 5 and not hand[r0, c0 + dc]:
-                    idx[r0, c0 + dc] = CI["-"]; col[r0, c0 + dc] = WHITE * f
-            for dr_ in range(-int(13 * sc), int(13 * sc) + 1):
-                f = 1 - abs(dr_) / (13 * sc + 1)
-                if 0 <= r0 + dr_ < FROWS and abs(dr_) > 2 and not hand[r0 + dr_, c0]:
-                    idx[r0 + dr_, c0] = CI["|"]; col[r0 + dr_, c0] = WHITE * f
-        return idx, col.astype(np.float32)
-
     def end_card(self, img, t):
-        if t < T_SPARK + 0.35:
+        if t < T_CARD:
             return img
         im = Image.fromarray(img)
         dr = ImageDraw.Draw(im)
-        lines = [(">>> let's work together.", 46, (252, 236, 212), T_SPARK + 0.35, 26),
-                 (self.handle, 38, (255, 196, 120), T_SPARK + 1.5, 26),
-                 ("stage visual concept for 2ND SUN - made 100% in code", 21, (190, 165, 140), T_SPARK + 2.0, 70)]
+        lines = [(">>> let's work together.", 46, (252, 236, 212), T_CARD, 26),
+                 (self.handle, 38, (255, 196, 120), T_CARD + 1.15, 26),
+                 ("stage visual concept for 2ND SUN - made 100% in code", 21, (190, 165, 140), T_CARD + 1.65, 70)]
         y = 1490
         for (txt, size, rgb, t0, cps) in lines:
             if txt and t >= t0:
@@ -513,11 +545,11 @@ class Show:
 
     def frame(self, t, fi):
         if t < DROP:
-            img = render(*self.pre_drop(t, fi))
-        elif t < T_HANDS:
+            img = render_fine(*self.pre_frame(t, fi))
+        elif t < T_END:
             img = render(*self.drop_frame(t, fi))
         else:
-            img = self.end_card(render_fine(*self.hands(t)), t)
+            img = self.end_card(render_fine(*self.end_frame(t, fi)), t)
         g = float(sstep(0.0, 0.25, t)) * (1 - float(sstep(DUR - 0.5, DUR, t)))
         return (img * g).astype(np.uint8) if g < 1 else img
 

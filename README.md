@@ -26,10 +26,10 @@ python code_to_monalisa.py --no-audio
 ```
 
 ## 3. 2ND SUN stage visual concept (9:16, cut to music)
-One continuous code transformation, no cuts: the star inside the logo starts to shine and
-pulls the logo into it, the drop bursts it into a sun, the sun becomes the iris of one big
-eye that looks around on the beat, the camera dives into the pupil, and out of the dark two
-hands drawn in code reach for each other until the star sparks between them.
+One continuous code transformation, no cuts: code fills the page and forms the logo, the
+star inside it starts to shine, two hands drawn in code reach in and meet on the star, on
+the drop it explodes into a sun, the sun becomes the iris of one big eye that looks around on
+the beat, the camera dives into the pupil, and out of the black the code forms the logo again.
 Timed to 126 BPM with the drop 9.52s in; `--start` picks where to cut the track.
 ```
 python second_sun.py --music track.mp3 --start 236.32 --handle @you --export second_sun.mp4
