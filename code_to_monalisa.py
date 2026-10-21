@@ -95,6 +95,12 @@ _a1 = ATLAS.get(1)
 RAMP = np.array(sorted([CI[c] for c in RAMP_SET], key=lambda i: _a1[i].mean()))
 PRINTABLE = np.array([CI[c] for c in CHARS[1:-1]])
 
+def to_glyphs(b, seed):
+    """brightness -> ramp glyphs, with a little flicker"""
+    jr = np.random.default_rng(seed).integers(-1, 2, (ROWS, COLS))
+    k = np.clip(np.round(b * (len(RAMP) - 1)).astype(int) + jr, 0, len(RAMP) - 1)
+    return np.where(b < 0.04, 0, RAMP[k])
+
 def compose(atlas, idx, col):
     g = atlas[idx]
     img = g[..., None] * col[:, :, None, None, :]
@@ -121,7 +127,14 @@ def render(idx, col, z=1.0, cx=CX, cy=CY):
 # ------------------------------------------------------------------ eye geometry
 EYE_UNIT = 315.0                          # px per eye unit (eye is 2.6 units wide)
 EYE_ZMAX = 1.2                            # push in while it stares
-EYE_MATCH = 1.0                           # eye zoom at which it matches the painting's eye at w0
+EYE_MATCH = 0.8                           # eye zoom at which it matches the painting's eye at w0
+# where the painting's eye sits in the close-up, in eye units (measured on monalisa.png, --eye 202.5 202.5)
+PAINT_EYE = (-0.44, -0.1)                 # eye center
+PAINT_IRIS = (0.16, 0.04)                # iris, relative to the eye center
+PAINT_R = 0.5                             # iris radius
+PAINT_OPEN = 0.77                         # her heavier lids
+PAINT_TILT = 0.09                         # inner corner sits lower
+MORPH_T0, MORPH_LEN = EYE_T0 + 4.45, 1.3  # video time the eye blends into the painting
 
 # ------------------------------------------------------------------ code text
 POOL = [
@@ -247,14 +260,14 @@ class Story:
         rr, cc = np.mgrid[0:ROWS, 0:COLS]
         rn = np.hypot((cc + 0.5 - CX) / (COLS / 2), (rr + 0.5 - CY) / (ROWS / 2)) / 1.414
         self.Ts = 12.0 + 1.9 * (0.72 * rn + 0.28 * rng.random((ROWS, COLS)))
-        # eye -> painting dissolve, center out
-        self.Tm = 14.0 + 0.75 * (0.65 * rn + 0.35 * rng.random((ROWS, COLS)))
+        # eye -> painting blend: the face fills in from the edges, the iris turns last
+        self.Md = (MORPH_LEN - 0.6) * (1 - np.clip(rn * 2.2, 0, 1)) + 0.08 * rng.random((ROWS, COLS))
+        self.Mr = rng.random((ROWS, COLS))
 
         # painting + eye
         self.setup_painting(img_path, eye)
         self.setup_eye(rng)
         self.full_idx, self.full_col = self.phaseA(self.code_done + 5)
-        self.target = self.eye_frame(0.0)
 
     # ---------- phase A
     def phaseA(self, t):
@@ -333,8 +346,8 @@ class Story:
                             ri, ci = int(round(br)) + dr, int(round(bc)) + dc
                             if 0 <= ri < ROWS and 0 <= ci < COLS:
                                 col[ri, ci] = np.maximum(col[ri, ci], np.array([0.6, 0.95, 1.0]) * f)
-        # convergence into the eye
-        ti, tcol = self.target
+        # convergence into the eye, which is already alive (waking up) as it assembles
+        ti, tcol = self.eye_frame(t - 14.0)
         dec = (t > self.Ts - 0.3) & (t < self.Ts)
         idx[dec] = rng.choice(PRINTABLE, int(dec.sum()))
         col[dec] = (0.85, 0.95, 1.0)
@@ -374,6 +387,9 @@ class Story:
             k = float(smoother(tk, tk + 0.08, u))
             if k <= 0: break
             gx, gy = gx + (x - gx) * k, gy + (y - gy) * k
+        # drowsy drift while it wakes up, then a little life while it stares
+        w = 1 - float(smoother(-0.8, 0.0, u))
+        gx, gy = gx + w * 0.12 * math.sin(u * 1.3 + 0.4), gy + w * 0.04 * math.sin(u * 0.9)
         d = float(sstep(2.0, 2.6, u)) * (1 - float(sstep(EYE_PULL - 0.3, EYE_PULL, u)))
         return gx + d * 0.008 * math.sin(u * 2.3), gy + d * 0.006 * math.sin(u * 1.7 + 1)
 
@@ -382,19 +398,32 @@ class Story:
         k = float(smoother(EYE_T0 + EYE_PULL, EYE_T0 + EYE_DUR + 1.8, T))
         return math.exp(math.log(EYE_MATCH / EYE_ZMAX) * (1 - k))
 
-    def eye_frame(self, u):
+    def eye_fields(self, u):
+        """brightness, color and stroke glyphs (lashes, fibers, code) of the eye at eye time u"""
+        m = float(smoother(EYE_PULL, EYE_PULL + 0.6, u))   # settle onto the painting's eye
         gx, gy = self.gaze(u)
-        op = (0.9 + 0.1 * float(smoother(0.0, 0.8, u))) * (1 - math.exp(-((u - 2.2) / 0.075) ** 2))
-        form = float(smoother(0.05, 0.95, u))
-        R = 0.42
+        gx, gy = gx + (PAINT_IRIS[0] - gx) * m, gy + (PAINT_IRIS[1] - gy) * m
+        # lids: closed while the code assembles, wake up in two steps, blink, relax into hers
+        if u < 0:
+            op = 0.9 * (0.4 * float(smoother(-2.0, -1.3, u)) + 0.6 * float(smoother(-1.1, -0.3, u)))
+        else:
+            op = 0.9 + 0.1 * float(smoother(0.0, 0.8, u))
+        op = op * (1 - math.exp(-((u - 2.2) / 0.075) ** 2))
+        op = op + (PAINT_OPEN - op) * m
+        form = float(smoother(-0.7, 0.6, u))
+        R = 0.42 + (PAINT_R - 0.42) * m
         # pupil: starts wide open and contracts to reveal the iris, then dilates when it sees us
         rp = 0.40 - 0.25 * form + 0.04 * float(smoother(2.5, 3.6, u)) + 0.005 * math.sin(u * 6)
+        rp = rp + (0.32 * R - rp) * m
         if u < EYE_PULL:
             z = 1 + (EYE_ZMAX - 1) * float(smoother(2.0, EYE_PULL, u))
         else:
             z = EYE_MATCH / self.cam(EYE_T0 + u)
         hx, hy = 0.025 * math.sin(u * 0.9), 0.015 * math.sin(u * 1.4 + 0.5)
-        X, Y = self.EX / z - hx, self.EY / z - hy
+        hx, hy = hx + (PAINT_EYE[0] - hx) * m, hy + (PAINT_EYE[1] - hy) * m
+        tilt = PAINT_TILT * m
+        X = self.EX / z - hx
+        Y = self.EY / z - hy + tilt * X
 
         # lids
         ex = 1.3
@@ -419,9 +448,11 @@ class Story:
         scl = (0.30 + 0.42 * ball) * (0.5 + 0.5 * shadow) * (0.92 + 0.12 * fbm(X * 5, Y * 5, 3, 9))
         b = np.where(inside, scl, b)
         scol = np.stack([np.ones_like(X), 0.88 - 0.1 * (1 - ball), 0.80 - 0.15 * (1 - ball)], -1)
+        scol = scol + (np.array([1.0, 0.86, 0.52]) - scol) * m
         col = np.where(inside[..., None], scol, col)
 
-        # iris: gold collar fading into code-cyan, fibers spin into place while it forms
+        # iris: gold collar fading into code-cyan, fibers spin into place while it forms,
+        # turns to her brown as it settles onto the painting
         dx, dy = X - gx, Y - gy
         d = np.hypot(dx, dy)
         a = np.arctan2(dy, dx) + 1.6 * (1 - form) ** 2
@@ -431,39 +462,39 @@ class Story:
         ib = 0.45 + 0.35 * fib_n + 0.30 * fibers
         ib = ib + 0.30 * np.exp(-((d - rp * 1.9) / 0.025) ** 2)
         ib = ib + 0.8 * np.exp(-((d - rp) / 0.03) ** 2) * (1 - form)       # bright edge as the pupil closes
-        ib = ib * (1 - 0.85 * sstep(0.80 * R, R, d)) * (0.45 + 0.55 * shadow)
+        ib = ib * (1 - 0.85 * sstep(0.80 * R, R, d)) * (0.45 + 0.55 * shadow) * (1 - 0.45 * m)
         iris = inside & (d < R * 1.02)
         pupil = inside & (d < rp)
         b = np.where(iris, np.clip(ib, 0, 1), b)
         gold, cyan = np.array([1.0, 0.78, 0.38]), np.array([0.25, 0.85, 1.0])
-        icol = (gold * (1 - zone[..., None]) + cyan * zone[..., None]) * (0.85 + 0.3 * fib_n[..., None])
+        outer = cyan + (np.array([0.62, 0.38, 0.30]) - cyan) * m
+        icol = (gold * (1 - zone[..., None]) + outer * zone[..., None]) * (0.85 + 0.3 * fib_n[..., None])
         col = np.where(iris[..., None], icol, col)
         b = np.where(pupil, 0.0, b)
 
         # wet highlights on the cornea
         hl1 = np.exp(-(((dx + 0.10) / 0.06) ** 4 + ((dy - 0.10) / 0.045) ** 4))
         hl2 = np.exp(-((dx - 0.12) ** 2 + (dy + 0.12) ** 2) / 0.0005)
-        hl = np.maximum(hl1, 0.7 * hl2) * op
+        hl = np.maximum(hl1, 0.7 * hl2) * op * (1 - m)
         b = np.where(inside, np.maximum(b, hl), b)
         col = np.where((inside & (hl > 0.25))[..., None], np.array([1.0, 0.97, 0.94]), col)
-
-        jr = np.random.default_rng(int(u * 12) + 99).integers(-1, 2, (ROWS, COLS))
-        k = np.clip(np.round(b * (len(RAMP) - 1)).astype(int) + jr, 0, len(RAMP) - 1)
-        idx = np.where(b < 0.04, 0, RAMP[k])
         col = col * np.clip(0.30 + 0.85 * b, 0, 1)[..., None]
 
-        # iris fibers drawn as radial strokes
+        # strokes drawn on top of the brightness: iris fibers as radial strokes
+        sidx = np.zeros((ROWS, COLS), np.int64)
+        scol_ = np.zeros((ROWS, COLS, 3), np.float32)
         phi = np.arctan2(dy / CH, dx / CW) % np.pi
         spoke = iris & ~pupil & (fibers > 0.62) & (b > 0.2)
         glyph = np.select([phi < np.pi / 8, phi < 3 * np.pi / 8, phi < 5 * np.pi / 8, phi < 7 * np.pi / 8],
                           [CI["-"], CI["/"], CI["|"], CI["\\"]], CI["-"])
-        idx = np.where(spoke, glyph, idx)
-        # still made of code while it forms
+        sidx = np.where(spoke, glyph, sidx)
+        scol_ = np.where(spoke[..., None], col, scol_)
+        # still made of code while it forms (flickering)
         if form < 1:
-            rng = np.random.default_rng(int(u * 30) + 7)
-            m = iris & ~pupil & (rng.random((ROWS, COLS)) < 0.7 * (1 - form))
-            idx[m] = rng.choice(PRINTABLE, int(m.sum()))
-            col[m] = np.array([0.55, 0.85, 1.0]) * (0.5 + 0.5 * b[m, None])
+            rng = np.random.default_rng(int((u + 10) * 30))
+            mk = iris & ~pupil & (rng.random((ROWS, COLS)) < 0.85 * (1 - form))
+            sidx[mk] = rng.choice(PRINTABLE, int(mk.sum()))
+            scol_[mk] = np.array([0.55, 0.85, 1.0]) * (0.5 + 0.5 * b[mk, None])
 
         # eyelashes
         if op > 0.03:
@@ -483,12 +514,20 @@ class Story:
                     ddx, ddy = math.sin(th) * ln / 9, sgn * math.cos(th) * ln / 9
                     px, py = px + ddx, py + ddy
                     i = int(round((px + hx) * z * EYE_UNIT / CW + CX - 0.5))
-                    j = int(round(CY - (py + hy) * z * EYE_UNIT / CH - 0.5))
+                    j = int(round(CY - (py - tilt * px + hy) * z * EYE_UNIT / CH - 0.5))
                     if not (0 <= i < COLS and 0 <= j < ROWS): continue
                     ang = math.atan2(ddx / CW, abs(ddy) / CH)
                     ang = ang if up else -ang
-                    idx[j, i] = CI["|"] if abs(ang) < 0.4 else (CI["-"] if abs(ang) > 1.2 else (CI["/"] if ang > 0 else CI["\\"]))
-                    col[j, i] = np.array([1.0, 0.80, 0.62]) * (0.85 - 0.5 * f) * on
+                    sidx[j, i] = CI["|"] if abs(ang) < 0.4 else (CI["-"] if abs(ang) > 1.2 else (CI["/"] if ang > 0 else CI["\\"]))
+                    scol_[j, i] = np.array([1.0, 0.80, 0.62]) * (0.85 - 0.5 * f) * on
+        return b, col, sidx, scol_
+
+    def eye_frame(self, u):
+        b, col, sidx, scol = self.eye_fields(u)
+        idx = to_glyphs(b, int((u + 10) * 12))
+        on = sidx > 0
+        idx = np.where(on, sidx, idx)
+        col = np.where(on[..., None], scol, col)
         return idx, col.astype(np.float32)
 
     # ---------- painting / frame / wall
@@ -539,7 +578,8 @@ class Story:
         cy = self.ey + (self.c1[1] - self.ey) * f
         return w, cx, cy
 
-    def phaseC(self, t):
+    def painting_fields(self, t):
+        """brightness and color of painting + frame + wall at story time t"""
         w, cx, cy = self.view(t)
         upc = w / W
         jx = (np.arange(COLS) + 0.5 - CX) * CW * upc + cx
@@ -586,11 +626,13 @@ class Story:
                        np.where(inframe[..., None], fcol * (0.35 + 0.75 * np.clip(prof, 0, 1))[..., None],
                                 wcol * (0.4 + 1.6 * wl)[..., None]))
 
-        jr = np.random.default_rng(int(t * 8)).integers(-1, 2, (ROWS, COLS))
-        k = np.clip(np.round(b * (len(RAMP) - 1)).astype(int) + jr, 0, len(RAMP) - 1)
-        idx = RAMP[k]
-        idx = np.where(b < 0.04, 0, idx)
+        return b, col, w, cx, cy
 
+    def phaseC(self, t):
+        b, col, w, cx, cy = self.painting_fields(t)
+        idx = to_glyphs(b, int(t * 8))
+        upc = w / W
+        pw = self.pw
         # museum label
         lf_ = float(sstep(20.4, 21.4, t))
         if lf_ > 0:
@@ -609,21 +651,18 @@ class Story:
         return idx, col.astype(np.float32)
 
     # ---------- any frame
-    def morph(self, t, fi):
-        """eye dissolves into the painting, cell by cell from the center out"""
-        idx, col = self.phaseC(t)
-        if t >= self.Tm.max() + 0.35:
-            return idx, col
-        eidx, ecol = self.eye_frame(t - 14.0 + EYE_DUR)
-        a = sstep(self.Tm, self.Tm + 0.35, t)[..., None]
-        col = col * a + np.array([0.95, 0.97, 1.0]) * (1 - a)
-        before = t < self.Tm - 0.15
-        idx = np.where(before, eidx, idx)
-        col = np.where(before[..., None], ecol, col)
-        rng = np.random.default_rng(fi * 5 + 3)
-        dec = ~before & (t < self.Tm)
-        idx[dec] = rng.choice(PRINTABLE, int(dec.sum()))
-        col[dec] = (0.85, 0.95, 1.0)
+    def morph(self, T):
+        """the eye, now sitting on hers, blends into the painting"""
+        u, t = T - EYE_T0, T + SHIFT - EYE_DUR
+        eb, ecol, sidx, scol = self.eye_fields(u)
+        pb, pcol, *_ = self.painting_fields(t)
+        a = smoother(MORPH_T0, MORPH_T0 + 0.6, T - self.Md)
+        b = eb * (1 - a) + pb * a
+        col = ecol * (1 - a[..., None]) + pcol * a[..., None]
+        idx = to_glyphs(b, int(t * 8))
+        on = (sidx > 0) & (self.Mr > a)
+        idx = np.where(on, sidx, idx)
+        col = np.where(on[..., None], scol * (1 - a[..., None]) + pcol * a[..., None], col)
         return idx, col.astype(np.float32)
 
     def frame(self, T, fi):
@@ -635,10 +674,12 @@ class Story:
                 img = render(idx, col, zoomA(t), CX, CY)
             else:
                 img = render(*self.phaseB(t, fi))
-        elif T < EYE_T0 + EYE_DUR:
+        elif T < MORPH_T0:
             img = render(*self.eye_frame(T - EYE_T0))
+        elif T < MORPH_T0 + MORPH_LEN:
+            img = render(*self.morph(T))
         else:
-            img = render(*self.morph(T + SHIFT - EYE_DUR, fi))
+            img = render(*self.phaseC(T + SHIFT - EYE_DUR))
         g = float(sstep(0.0, 0.4, T)) * (1 - float(sstep(DUR - 0.6, DUR, T)))
         return (img * g).astype(np.uint8) if g < 1 else img
 
@@ -714,15 +755,12 @@ def make_audio(story, path):
     add(A(12.6), pad, 0.035)
     # pupil contracts: falling sweep as the iris forms
     tt = np.arange(int(SR * 0.9)) / SR
-    add(E(0.05), np.sin(2 * np.pi * np.cumsum(900 * np.exp(-tt / 0.3) + 180) / SR) * np.exp(-tt / 0.35), 0.06)
+    add(E(-0.7), np.sin(2 * np.pi * np.cumsum(900 * np.exp(-tt / 0.3) + 180) / SR) * np.exp(-tt / 0.35), 0.06)
     # saccades while it searches, a soft blink, then it locks onto us
     for (tk, x, y) in story.gaze_kf[1:4]:
         add(E(tk), click(0.01, 0.6), 0.18)
     add(E(2.2), click(0.03, 0.15), 0.25)
     add(E(1.98), beep(1800, 0.12), 0.06); add(E(1.98), click(0.02, 0.3), 0.3)
-    # eye dissolves into the painting
-    for k in range(14):
-        add(C(14.0) + k * 0.055, beep(rng.uniform(1500, 3000), 0.05), 0.03)
     # pull back whoosh
     d = 5.0
     nz = rng.normal(0, 1, int(SR * d))
