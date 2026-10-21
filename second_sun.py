@@ -10,8 +10,8 @@ dive into the pupil: the two dots in it grow into two moons ->
 a rocket comes in from out of frame and burns A SPACE ODYSSEY in as it passes ->
 it comes back close to the camera and its giant trail paints the date: FRI OCT 30.
 
-Export:   python second_sun.py --music track.mp3 --start 236.32 --handle @rony_matar --export second_sun.mp4
-          (--start = where to cut the track; the drop lands 9.52s in, 5 bars at 126 BPM)
+Export:   python second_sun.py --music chihiro.mp3 --export second_sun.mp4
+          (--start = where to cut the track, negative to start it late; the explosion is 9.52s in)
 """
 import argparse, math, os, subprocess
 import numpy as np
@@ -26,6 +26,7 @@ DUR = 30.55
 BPM = 126.05
 BEAT = 60 / BPM
 BAR = 4 * BEAT
+MBEAT = 60 / 110.0                        # the music's beat (CHIHIRO cover, 110 BPM); one lands on DROP
 DROP = 5 * BAR                            # 9.52s: the kick comes back
 BREAK = DROP - BAR                        # 7.62s: the riser stops, the hands close in
 T_HANDS_IN = 2.8                          # the hands start reaching for the star
@@ -85,7 +86,7 @@ ZE = 1.25                                 # zoom once the eye is revealed
 def kick(t):
     """1 on each kick after the drop, decaying"""
     if t < DROP: return 0.0
-    return math.exp(-((t - DROP) % BEAT) / 0.11)
+    return math.exp(-((t - DROP) % MBEAT) / 0.11)
 
 def typed(text, t, t0, cps=24.0):
     n = int(max(0.0, (t - t0) * cps))
@@ -323,7 +324,7 @@ class Show:
         rc = np.hypot(GX - 540, GY - 960)
         self.T_eye = T_IRIS + 0.15 + 0.9 * np.clip((rc - 300) / 900, 0, 1) + 0.18 * R
         # gaze keyframes on the beat after the eye is revealed: (time, x, y)
-        b = lambda n: DROP + n * BEAT
+        b = lambda n: DROP + n * MBEAT
         self.gaze_kf = [(b(10), -0.2, 0.03), (b(12), 0.21, -0.02), (b(13), 0.06, 0.07), (b(14), 0.0, 0.0)]
         self.T_blink = b(15.5)
         self.lashes = []
@@ -407,10 +408,10 @@ class Show:
         I = 0.35 * float(smoother(2.4, 3.9, t)) + 0.65 * float(smoother(3.9, DROP, t))
         grow = float(smoother(2.4, 4.8, t))               # the star grows from a point of light
         if t < BREAK:
-            p = 0.4 * math.exp(-(t % BEAT) / 0.12) * float(sstep(3.4, 5.0, t))
+            p = 0.4 * math.exp(-((t - DROP) % MBEAT) / 0.12) * float(sstep(3.4, 5.0, t))
         else:
             v = (t - BREAK) / BAR
-            p = math.exp(-((t - BREAK) % (BEAT / (1 + int(v * 3)))) / 0.12)
+            p = math.exp(-((t - DROP) % (MBEAT / (1 + int(v * 3)))) / 0.12)
         return I, (0.03 + 1.22 * grow + 0.12 * p) * grow, p
 
     def code_logo(self, tl, I, sc, p, dim, fi, rate=1.0):
@@ -890,7 +891,7 @@ class Show:
         # --- outside the iris, before it becomes the eye: corona, rays, kick rings, smoke
         r_px = np.hypot(GX - cx, GY - cy)
         corona = (0.5 + 0.5 * np.sin(ang * 14 + u * 1.5)) * np.exp(-np.maximum(r_px - Rpx, 0) / (140 + 80 * k))
-        ring = np.exp(-((r_px - (Rpx + ((t - DROP) % BEAT) * 1500)) / 22) ** 2) * k
+        ring = np.exp(-((r_px - (Rpx + ((t - DROP) % MBEAT) * 1500)) / 22) ** 2) * k
         b_out = np.maximum(0.45 * corona + 0.6 * ring, self.smoke(t, 0.7))
         heat = np.clip(1 - r_px / (Rpx * 1.9), 0, 1)[..., None]
         c_out = EMBER * (1 - heat) + np.array([1.0, 0.9, 0.62]) * heat
@@ -1004,8 +1005,16 @@ def export(path, music, start, handle):
     cmd = [ff, "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W}x{H}",
            "-r", str(FPS), "-i", "-"]
     if music:
-        cmd += ["-ss", str(start), "-t", str(DUR), "-i", music,
-                "-af", f"afade=t=in:d=0.05,afade=t=out:st={DUR - 1.5}:d=1.5", "-c:a", "aac", "-b:a", "192k"]
+        pre = []
+        delay = ""
+        if start >= 0:
+            pre = ["-ss", str(start)]
+        else:
+            ms = int(round(-start * 1000))
+            delay = f"adelay={ms}|{ms},"
+        cmd += pre + ["-t", str(DUR), "-i", music,
+                      "-af", f"{delay}afade=t=in:st={max(-start, 0)}:d=0.05,apad,atrim=0:{DUR},"
+                             f"afade=t=out:st={DUR - 1.5}:d=1.5", "-c:a", "aac", "-b:a", "192k"]
     cmd += ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "17", "-preset", "medium", "-shortest", path]
     p = subprocess.Popen(cmd, stdin=subprocess.PIPE)
     n = int(DUR * FPS)
@@ -1020,7 +1029,9 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--export", default="second_sun.mp4")
     ap.add_argument("--music", default=None, help="audio file to cut the video to")
-    ap.add_argument("--start", type=float, default=236.32, help="seconds into the track to start (drop lands 9.52s later)")
+    ap.add_argument("--start", type=float, default=-0.76,
+                    help="seconds into the track to start; negative = the track starts that late. "
+                         "Default: the CHIHIRO cover, its bar-5 hit (8.76s) lands on the explosion at 9.52s")
     ap.add_argument("--handle", default="@rony_matar")
     a = ap.parse_args()
     export(a.export, a.music, a.start, a.handle)
