@@ -7,7 +7,7 @@ starts to shine -> two hands drawn in code reach in and meet on the star -> on t
 drop it explodes into a sun with the logo stamped in it -> the sun becomes an iris,
 the camera pulls back: one big eye -> it looks around on the beat and stares at you ->
 dive into the pupil -> inside, an old phone drops in spinning, its screen lights up ->
-it turns into code, the code forms the logo again -> let's work together.
+the phone melts into the logo and the star lights up again -> let's work together.
 
 Export:   python second_sun.py --music track.mp3 --start 236.32 --handle @you --export second_sun.mp4
           (--start = where to cut the track; the drop lands 9.52s in, 5 bars at 126 BPM)
@@ -34,6 +34,7 @@ T_DIVE = DROP + 4.5 * BAR                 # dive into the pupil
 T_END = DROP + 5 * BAR                    # 19.05s: inside the pupil, an old phone drops in
 T_PHONE = T_END
 T_OUTRO = T_PHONE + 2 * BAR               # 22.86s: the phone turns back into code, the logo again
+MORPH = 1.1                               # the phone melts into the logo
 T_CARD = T_OUTRO + 2.1                    # let's work together
 
 CREAM = np.array([0.99, 0.92, 0.82], np.float32)
@@ -179,6 +180,34 @@ def hand_sdf(X, Y, wx, wy, ang, s, fingers, thumb_ang, mirror):
     tx, ty = tips[0]
     if mirror: ty = -ty
     return d * s, (wx + (tx * c - ty * sn) * s, wy + (tx * sn + ty * c) * s)
+
+def mask_sdf(mask, sx=FCW, sy=FCH):
+    """signed distance in px to the edge of a cell mask (negative inside), two-pass chamfer"""
+    def dist(m):
+        INF = 1e9
+        d = np.where(m, 0.0, INF)
+        dg = math.hypot(sx, sy)
+        R, C = d.shape
+        for r in range(R):
+            for c in range(C):
+                v = d[r, c]
+                if c > 0: v = min(v, d[r, c - 1] + sx)
+                if r > 0:
+                    v = min(v, d[r - 1, c] + sy)
+                    if c > 0: v = min(v, d[r - 1, c - 1] + dg)
+                    if c < C - 1: v = min(v, d[r - 1, c + 1] + dg)
+                d[r, c] = v
+        for r in range(R - 1, -1, -1):
+            for c in range(C - 1, -1, -1):
+                v = d[r, c]
+                if c < C - 1: v = min(v, d[r, c + 1] + sx)
+                if r < R - 1:
+                    v = min(v, d[r + 1, c] + sy)
+                    if c < C - 1: v = min(v, d[r + 1, c + 1] + dg)
+                    if c > 0: v = min(v, d[r + 1, c - 1] + dg)
+                d[r, c] = v
+        return d
+    return dist(mask) - dist(~mask)
 
 # ------------------------------------------------------------------ the old phone, ray-traced into characters
 def rbox(px, py, pz, bx, by, bz, r):
@@ -331,6 +360,10 @@ class Show:
         self.rain_phase = rng.uniform(0, 40, FCOLS)
         self.phone = Phone()
         self.frand = rng.random((FROWS, FCOLS))
+        # shapes for the phone -> logo morph: the phone's front silhouette and the logo, as distances
+        lx, ly = (FGX - 540) / PHONE_S, -(FGY - PHONE_Y) / PHONE_S
+        self.d_phone = phone_sdf(lx, ly, np.zeros_like(lx)) * PHONE_S
+        self.d_logo = mask_sdf(self.flogo > 0.5)
 
     def build_page(self, rng):
         """a page of code on the fine grid: what each cell says, its color, when it gets typed"""
@@ -508,16 +541,19 @@ class Show:
             idx, col = self.hands_over(idx, col, t, I)
         return idx, col
 
-    def phone_frame(self, t, fi):
+    def phone_frame(self, t, fi, phone=True):
         """inside the pupil: dim code drifting in the dark, the phone falling through it"""
-        b, pc, lcd, labels = self.phone.fields(t)
+        if phone:
+            b, pc, lcd, labels = self.phone.fields(t)
+        else:
+            b, pc, lcd, labels = np.zeros((FROWS, FCOLS)), np.zeros((FROWS, FCOLS, 3)), np.zeros((FROWS, FCOLS), bool), []
         rr = np.arange(FROWS)[:, None]
         ph = (rr - t * self.rain_speed[None, :] * 0.6 - self.rain_phase[None, :] * 3) % 45
         rain = (ph < 4) & (self.frand < 0.5)
         idx = np.where(rain, self.page_idx, 0)
         col = np.broadcast_to(np.array([0.45, 0.55, 0.75], np.float32), (FROWS, FCOLS, 3)) * \
             (0.12 + 0.18 * (1 - ph / 4)).clip(0, 0.3)[..., None]
-        on = b > 0.02
+        on = self.phone_on = b > 0.02
         idx = np.where(on, glyphs(np.clip(b, 0, 1), int(t * 12), (FROWS, FCOLS)), idx)
         col = np.where(on[..., None], pc * np.clip(0.35 + 0.8 * b, 0, 1)[..., None], col)
         idx = np.where(lcd & (b < 0.2), 0, idx)          # the screen stays dark under the text
@@ -536,32 +572,39 @@ class Show:
         x0 = 540 + LCD[0] * PHONE_S
         top = y0 - LCD[3] * PHONE_S
         im = Image.fromarray(img); dr = ImageDraw.Draw(im)
-        green = (120, 255, 140)
-        dr.text((x0 + 14, top + 14), "1 NEW MESSAGE", font=find_font(19), fill=(90, 200, 110))
+        f = 1 - float(sstep(T_OUTRO, T_OUTRO + 0.35, t))              # fades as the phone melts
+        green = tuple(int(c * f) for c in (120, 255, 140))
+        dr.text((x0 + 14, top + 14), "1 NEW MESSAGE", font=find_font(19), fill=tuple(int(c * f) for c in (90, 200, 110)))
         if (t * 2.5) % 2 < 1:
             dr.text((x0 + 14, top + 64), "\u2588", font=find_font(34), fill=green)
         return np.asarray(im)
 
     def end_frame(self, t, fi):
-        """out of the black: the code fills the page again, twice as fast, and forms the logo"""
+        """the phone melts into the logo, the star inside it lights up again"""
         k = kick(t) * (1 - float(sstep(DUR - 3, DUR - 1, t)))
-        tl = (t - T_OUTRO) * 2.6
-        I = (0.55 + 0.08 * math.sin(t * 2.2)) * float(sstep(T_OUTRO + 0.6, T_OUTRO + 1.6, t))
-        idx, col = self.code_logo(tl, I, 1.0 + 0.12 * k, k, 0.24, fi, rate=2.6)
-        # the phone breaks up into the code
-        if t < T_OUTRO + 0.7:
-            pidx, pcol = self.phone_frame(T_OUTRO - 0.01, fi)
-            Td = T_OUTRO + 0.55 * self.frand
-            keep = (t < Td - 0.1) & (pidx > 0)
-            dec = (t >= Td - 0.1) & (t < Td) & (pidx > 0)
-            idx = np.where(keep, pidx, idx)
-            col = np.where(keep[..., None], pcol, col)
-            rng = np.random.default_rng(fi + 5)
-            idx[dec] = rng.choice(PRINTABLE, int(dec.sum()))
-            col[dec] = (0.55, 1.0, 0.65)
-        return idx, col
+        a = float(smoother(T_OUTRO, T_OUTRO + MORPH, t))
+        I = (0.55 + 0.08 * math.sin(t * 2.2)) * float(sstep(T_OUTRO + MORPH - 0.3, T_OUTRO + MORPH + 0.7, t))
+        lidx, lcol = self.code_logo(60 + t - T_OUTRO, I, 1.0 + 0.12 * k, k, 0.0, fi)   # logo + light, no page
+        pidx, pcol = self.phone_frame(t, fi, phone=a < 1)
+        if a >= 1:
+            show = lidx > 0
+            light = show & (lcol.max(-1) > 0.03)
+            return np.where(light, lidx, pidx), np.where(light[..., None], lcol, pcol)
+        inside = (self.d_phone * (1 - a) + self.d_logo * a) < 0
+        phone_cell = inside & self.phone_on
+        logo_char = np.where(lidx > 0, lidx, self.logo_idx)
+        take_logo = self.frand < a
+        idx = np.where(inside, np.where(take_logo | ~phone_cell, logo_char, pidx), pidx)
+        base = np.where(phone_cell[..., None], pcol, np.array([0.55, 0.53, 0.5]) * 0.8)
+        lc = np.where((lcol.max(-1) > 0.05)[..., None], lcol, CREAM * 0.9)
+        col = np.where(inside[..., None], base * (1 - a) + lc * a, pcol)
+        # whatever of the phone is outside the shape is gone; its light comes in with the logo
+        idx = np.where(~inside & self.phone_on, 0, idx)
+        glow = ~inside & (self.flogo <= 0.5) & (lidx > 0) & (lcol.max(-1) > 0.03)
+        idx = np.where(glow & (self.frand < a), lidx, idx)
+        col = np.where((glow & (self.frand < a))[..., None], lcol, col)
+        return idx, col.astype(np.float32)
 
-    # ---------- 2. sun -> iris -> eye -> pupil
     def gaze(self, t):
         gx = gy = 0.0
         for (tk, x, y) in self.gaze_kf:
@@ -724,7 +767,10 @@ class Show:
         elif t < T_OUTRO:
             img = self.phone_text(render_fine(*self.phone_frame(t, fi)), t)
         else:
-            img = self.end_card(render_fine(*self.end_frame(t, fi)), t)
+            img = render_fine(*self.end_frame(t, fi))
+            if t < T_OUTRO + 0.4:
+                img = self.phone_text(img, t)
+            img = self.end_card(img, t)
         g = float(sstep(0.0, 0.25, t)) * (1 - float(sstep(DUR - 0.5, DUR, t)))
         return (img * g).astype(np.uint8) if g < 1 else img
 
