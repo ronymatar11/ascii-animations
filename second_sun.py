@@ -6,7 +6,7 @@ code fills the page -> the code forms the logo, and as it forms the star inside 
 starts to shine -> two hands drawn in code reach in and meet on the star -> on the
 drop it explodes into a sun with the logo stamped in it -> the sun becomes an iris,
 the camera pulls back: one big eye -> it looks around on the beat and stares at you ->
-dive into the pupil -> inside, an old phone drops in spinning, its screen lights up ->
+dive into the pupil -> inside, an old phone drops in spinning and types "you need me" ->
 the phone melts into the logo and the star lights up again -> let's work together.
 
 Export:   python second_sun.py --music track.mp3 --start 236.32 --handle @you --export second_sun.mp4
@@ -27,13 +27,13 @@ BEAT = 60 / BPM
 BAR = 4 * BEAT
 DROP = 5 * BAR                            # 9.52s: the kick comes back
 BREAK = DROP - BAR                        # 7.62s: the riser stops, the hands close in
-T_HANDS_IN = 4.6                          # the hands start reaching for the star
+T_HANDS_IN = 2.8                          # the hands start reaching for the star
 T_IRIS = DROP + 1.6 * BAR                 # the sun turns into an iris
 T_PULL = DROP + 1.8 * BAR                 # camera pulls back: it's an eye
 T_DIVE = DROP + 4.5 * BAR                 # dive into the pupil
 T_END = DROP + 5 * BAR                    # 19.05s: inside the pupil, an old phone drops in
 T_PHONE = T_END
-T_OUTRO = T_PHONE + 2 * BAR               # 22.86s: the phone turns back into code, the logo again
+T_OUTRO = T_PHONE + 2 * BAR + 2 * BEAT    # 23.81s: the phone melts into the logo
 MORPH = 1.1                               # the phone melts into the logo
 T_CARD = T_OUTRO + 2.1                    # let's work together
 
@@ -149,8 +149,8 @@ FINGERS_OPEN = [
     (90, -32, -0.12, (32, 21, 16), (0.55, 0.55, 0.40), 11.0),
 ]
 
-def hand_sdf(X, Y, wx, wy, ang, s, fingers, thumb_ang, mirror):
-    """hand in local coords: wrist at 0, pointing +x, thumb side +y"""
+def hand_sdf(X, Y, wx, wy, ang, s, fingers, thumb_ang, mirror, flex=(0, 0, 0, 0)):
+    """hand in local coords: wrist at 0, pointing +x, thumb side +y; flex = extra curl per finger"""
     c, sn = math.cos(ang), math.sin(ang)
     lx = ((X - wx) * c + (Y - wy) * sn) / s
     ly = (-(X - wx) * sn + (Y - wy) * c) / s
@@ -160,11 +160,11 @@ def hand_sdf(X, Y, wx, wy, ang, s, fingers, thumb_ang, mirror):
     d = smin(d, seg_sdf(lx, ly, 12, 0, 74, 0, 45, 43), 22)          # palm
     d = smin(d, seg_sdf(lx, ly, 72, 24, 92, -24, 22, 20), 14)       # knuckles
     tips = []
-    for (bx, by, a0, lens, curls, r) in fingers:
+    for (bx, by, a0, lens, curls, r), fx in zip(fingers, flex):
         x, y, a = bx, by, a0
         fd = None
         for k, (L, cu) in enumerate(zip(lens, curls)):
-            a = a - cu
+            a = a - cu - fx
             nx, ny = x + L * math.cos(a), y + L * math.sin(a)
             r0, r1 = r * (1 - 0.07 * k), r * (1 - 0.07 * (k + 1)) - (2.5 if k == 2 else 0)
             sd = seg_sdf(lx, ly, x, y, nx, ny, r0 * 0.94, r1 * 0.94)
@@ -230,20 +230,17 @@ KEYS = [(kx, ky, lab) for ky, row in zip((105, 35, -35, -105, -175), ("123", "45
 class Phone:
     """drops in from above the frame spinning, bounces, buzzes, types on its screen"""
     def pose(self, u):
-        land = 0.95
-        if u < land:
-            y = -560 + (PHONE_Y + 560) * (u / land) ** 2                     # falling
-        else:
-            v = u - land
-            y = PHONE_Y - 90 * abs(math.sin(v * 7.5)) * math.exp(-v * 4.5)   # bounces
-        th = 4 * math.pi * float(smoother(0.0, 1.7, u))                     # spins, ends facing us
-        ph = 0.45 * math.sin(u * 5.0) * math.exp(-u * 1.6)
+        # already coming in at the first frame, glides down, eases past and settles back once
+        y = PHONE_FROM + (PHONE_Y - PHONE_FROM) * float(smoother(0.0, 1.6, u))
+        y += 32 * math.sin(math.pi * min(max((u - 1.2) / 0.7, 0.0), 1.0))
+        th = 2 * math.pi * float(smoother(0.0, 1.8, u))                     # one slow turn, ends facing us
+        ph = 0.22 * math.sin(u * 3.0) * math.exp(-u * 1.8)
         return y, th, ph
 
     def fields(self, t):
         u = t - T_PHONE
         cy, th, ph = self.pose(u)
-        cx = 540.0 + 4 * kick(t) * math.sin(t * 90) * float(sstep(1.6, 1.8, u))   # buzz on the kick
+        cx = 540.0 + 4 * kick(t) * math.sin(t * 90) * float(sstep(1.6, 1.8, u)) * (1 - float(sstep(T_OUTRO - T_PHONE - 0.3, T_OUTRO - T_PHONE, u)))   # buzz on the kick
         b = np.zeros((FROWS, FCOLS)); col = np.zeros((FROWS, FCOLS, 3), np.float32)
         lcd = np.zeros((FROWS, FCOLS), bool)
         wx, wy = (FGX - cx) / PHONE_S, -(FGY - cy) / PHONE_S
@@ -289,7 +286,7 @@ class Phone:
             cc = np.where(on_key[:, None], np.array([1.0, 0.93, 0.82]), cc)
             # screen: dark until it wakes, then green
             scr = front & (x > LCD[0]) & (x < LCD[1]) & (y > LCD[2]) & (y < LCD[3])
-            wake = float(sstep(1.75, 1.9, u)) * (0.85 + 0.15 * (math.sin(t * 40) > -0.6))
+            wake = float(sstep(1.6, 1.75, u)) * (0.85 + 0.15 * (math.sin(t * 40) > -0.6))
             bb = np.where(scr, 0.05 + 0.33 * wake, bb)
             cc = np.where(scr[:, None], np.array([0.45, 1.0, 0.55]), cc)
             bi = np.zeros(m.sum()); bi[hit] = bb
@@ -306,6 +303,7 @@ class Phone:
         return b, col, lcd, labels
 
 PHONE_Y = 930.0
+PHONE_FROM = 150.0                        # where the fall starts: the bottom of the phone already in frame
 PHONE_S = 1.35                            # phone units -> px
 
 
@@ -502,10 +500,18 @@ class Show:
     def hands_over(self, idx, col, t, I):
         """two hands drawn in code reach in and meet on the star on the drop"""
         u = t - T_HANDS_IN
-        m = float(smoother(T_HANDS_IN, DROP - 0.04, t))
+        x = min(max(u / (DROP - 0.04 - T_HANDS_IN), 0.0), 1.0)
+        m = 1 - (1 - x) ** 2.2                          # moving from the first frame, slowing as they arrive
+        live = 1 - x ** 4                               # sway and finger play settle exactly on the drop
         sx, sy = self.star_xy
-        dl, tip_l = hand_sdf(FGX, FGY, HAND_L[0] - 470 * (1 - m), HAND_L[1] + 215 * (1 - m), -0.42, HAND_S, FINGERS_OPEN, 1.0, True)
-        dr, tip_r = hand_sdf(FGX, FGY, HAND_R[0] + 470 * (1 - m), HAND_R[1] - 215 * (1 - m), math.pi - 0.47, HAND_S, FINGERS_POINT, 0.55, False)
+        swl = (14 * math.sin(t * 1.7) * live, 10 * math.sin(t * 1.3 + 1) * live)
+        swr = (12 * math.sin(t * 1.5 + 2) * live, 9 * math.sin(t * 1.9) * live)
+        fl = [0.04 * math.sin(t * 2.4) * live] + [0.14 * math.sin(t * 2.4 + i * 0.9) * live for i in range(1, 4)]
+        fr = [0.03 * math.sin(t * 2.1 + 1) * live] + [0.12 * math.sin(t * 2.1 + i * 1.1) * live for i in range(1, 4)]
+        dl, tip_l = hand_sdf(FGX, FGY, HAND_L[0] - 470 * (1 - m) + swl[0], HAND_L[1] + 215 * (1 - m) + swl[1],
+                             -0.42 + 0.05 * math.sin(t * 1.1) * live, HAND_S, FINGERS_OPEN, 1.0, True, fl)
+        dr, tip_r = hand_sdf(FGX, FGY, HAND_R[0] + 470 * (1 - m) + swr[0], HAND_R[1] - 215 * (1 - m) + swr[1],
+                             math.pi - 0.47 + 0.05 * math.sin(t * 0.9 + 2) * live, HAND_S, FINGERS_POINT, 0.55, False, fr)
         inl, inr = dl < 0, dr < 0
         hand = inl | inr
         idx = np.where(hand, 0, idx)
@@ -564,9 +570,9 @@ class Show:
         return idx, col.astype(np.float32)
 
     def phone_text(self, img, t):
-        """the green screen once the phone has landed: a new message, a blinking cursor"""
+        """the green screen once the phone has landed: a new message, typed"""
         u = t - T_PHONE
-        if u < 1.9:
+        if u < 1.75:
             return img
         y0, _, _ = self.phone.pose(u)
         x0 = 540 + LCD[0] * PHONE_S
@@ -575,8 +581,9 @@ class Show:
         f = 1 - float(sstep(T_OUTRO, T_OUTRO + 0.35, t))              # fades as the phone melts
         green = tuple(int(c * f) for c in (120, 255, 140))
         dr.text((x0 + 14, top + 14), "1 NEW MESSAGE", font=find_font(19), fill=tuple(int(c * f) for c in (90, 200, 110)))
-        if (t * 2.5) % 2 < 1:
-            dr.text((x0 + 14, top + 64), "\u2588", font=find_font(34), fill=green)
+        s, typing = typed("you need me", t, T_PHONE + 1.95, 7.5)
+        cur = "\u2588" if typing or (t * 2.5) % 2 < 1 else ""
+        dr.text((x0 + 14, top + 64), s + cur, font=find_font(34), fill=green)
         return np.asarray(im)
 
     def end_frame(self, t, fi):
@@ -623,6 +630,10 @@ class Show:
         e = 1 - math.exp(-u / 0.1)
         cx = self.star_xy[0] + (540 - self.star_xy[0]) * e
         cy = self.star_xy[1] + (960 - self.star_xy[1]) * e
+        # once it's an eye it floats, slowly up and down, until the dive centres on the pupil
+        fw = float(sstep(T_PULL, T_PULL + 1.2, t)) * (1 - float(smoother(T_DIVE - 0.5, T_DIVE + 0.2, t)))
+        cy += 85 * math.sin(2 * math.pi * (t - T_PULL) / 3.8) * fw
+        cx += 24 * math.sin(2 * math.pi * (t - T_PULL) / 5.3 + 0.7) * fw
         gx, gy = self.gaze(t)
         X = (GX - cx) / (EU * z)
         Y = -(GY - cy) / (EU * z)
