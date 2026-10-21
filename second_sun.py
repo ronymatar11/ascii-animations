@@ -248,6 +248,11 @@ class Show:
             tt[r, a:e] = start + np.arange(e - a) / speed
         idx[idx == CI[" "]] = 0
         self.page_idx, self.page_col, self.page_t = idx, col, tt
+        # once a line is typed it keeps drifting sideways, every line its own speed and direction
+        fin = np.where(np.isfinite(tt), tt, -np.inf)
+        self.row_done = fin.max(1)
+        self.row_v = rng.choice([-1, 1], FROWS) * rng.uniform(2.5, 9.0, FROWS)
+        self.logo_v = rng.choice([-1, 1], FROWS) * rng.uniform(10, 22, FROWS)
         self.fglyph_rand = rng.choice(PRINTABLE, (FROWS, FCOLS))
         # inside the logo, thin glyphs are swapped for dense ones so the letters read as solid
         dense = RAMP[int(len(RAMP) * 0.55):]
@@ -287,14 +292,24 @@ class Show:
             p = math.exp(-((t - BREAK) % (BEAT / (1 + int(v * 3)))) / 0.12)
         return I, 0.75 + 0.5 * I + 0.12 * p, p
 
-    def code_logo(self, tl, I, sc, p, dim, fi):
-        """fine grid: the page of code at typing time tl, the logo formed out of it, the star's light"""
+    def code_logo(self, tl, I, sc, p, dim, fi, rate=1.0):
+        """fine grid: the page of code at typing time tl, the logo formed out of it, the star's light.
+        rate = how much faster tl runs than real time (motion speeds stay in real time)"""
         sx, sy = self.star_xy
-        dt = tl - self.page_t
+        cols = np.arange(FCOLS)[None, :]
+        # finished lines scroll
+        off = np.floor(self.row_v * np.clip(tl - self.row_done, 0, None) / rate).astype(int)
+        ci = (cols + off[:, None]) % FCOLS
+        pt = np.take_along_axis(self.page_t, ci, 1)
+        dt = tl - pt
         typed = dt >= 0
-        idx = np.where(typed, self.page_idx, 0)
+        idx = np.where(typed, np.take_along_axis(self.page_idx, ci, 1), 0)
         fresh = np.exp(-np.clip(dt, 0, None) / 0.1)[..., None]
-        col = self.page_col * (1 - fresh) + fresh
+        col = np.take_along_axis(self.page_col, ci[..., None], 1) * (1 - fresh) + fresh
+        rng = np.random.default_rng(fi)
+        retype = typed & (idx > 0) & (rng.random((FROWS, FCOLS)) < 0.006)     # lines being rewritten
+        idx[retype] = rng.choice(PRINTABLE, int(retype.sum()))
+        col[retype] = 1.0
         head = (dt < 0) & (dt > -0.025)
         idx = np.where(head, BLOCK, idx)
         col = np.where(head[..., None], np.array([0.8, 0.82, 0.85]), col)
@@ -307,13 +322,16 @@ class Show:
         lg = L & formed
         heat = np.clip(np.exp(-r / (140 + 420 * I)) * I * 1.3, 0, 1)[..., None]
         pop = np.exp(-np.clip(tl - self.T_form, 0, None) / 0.18)[..., None]
-        lc = (CREAM * (1 - heat) + GOLD * heat) * (1 + 0.5 * pop)
-        idx = np.where(lg, self.logo_idx, idx)
+        shimmer = (0.82 + 0.28 * np.sin(FGX * 0.018 + FGY * 0.006 - tl / rate * 4.0))[..., None]
+        lc = (CREAM * (1 - heat) + GOLD * heat) * (1 + 0.5 * pop) * shimmer
+        # code keeps flowing through the letters
+        lci = (cols + np.floor(self.logo_v * tl / rate).astype(int)[:, None]) % FCOLS
+        idx = np.where(lg, np.take_along_axis(self.logo_idx, lci, 1), idx)
         col = np.where(lg[..., None], lc, col)
         grey = col.mean(-1, keepdims=True) * np.array([0.8, 0.85, 1.0])
         col = np.where((~L & formed)[..., None], (col * 0.4 + grey * 0.6) * dim, col)
         flip = L & (tl >= self.T_form - 0.08) & (tl < self.T_form)
-        rng = np.random.default_rng(fi)
+        flip |= lg & (rng.random((FROWS, FCOLS)) < 0.012)                   # glitter in the letters
         idx[flip] = rng.choice(PRINTABLE, int(flip.sum()))
         col[flip] = (0.75, 0.95, 1.0)
 
@@ -384,9 +402,9 @@ class Show:
     def end_frame(self, t, fi):
         """out of the black: the code fills the page again, twice as fast, and forms the logo"""
         k = kick(t) * (1 - float(sstep(DUR - 3, DUR - 1, t)))
-        tl = min((t - T_END) * 2.6, 7.0)
+        tl = (t - T_END) * 2.6
         I = (0.55 + 0.08 * math.sin(t * 2.2)) * float(sstep(T_END + 0.6, T_END + 1.6, t))
-        return self.code_logo(tl, I, 1.0 + 0.12 * k, k, 0.24, fi)
+        return self.code_logo(tl, I, 1.0 + 0.12 * k, k, 0.24, fi, rate=2.6)
 
     # ---------- 2. sun -> iris -> eye -> pupil
     def gaze(self, t):
