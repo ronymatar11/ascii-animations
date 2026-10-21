@@ -404,13 +404,14 @@ class Show:
     # ---------- 1. code fills the page, forms the logo, the star lights up, the hands meet on it
     def star_light(self, t):
         """intensity, scale and pulse of the star: it wakes up as the logo forms"""
-        I = 0.35 * float(sstep(2.7, 3.6, t)) + 0.65 * float(smoother(3.6, DROP, t))
+        I = 0.35 * float(smoother(2.4, 3.9, t)) + 0.65 * float(smoother(3.9, DROP, t))
+        grow = float(smoother(2.4, 4.8, t))               # the star grows from a point of light
         if t < BREAK:
-            p = 0.4 * math.exp(-(t % BEAT) / 0.12) * float(sstep(3.0, 4.5, t))
+            p = 0.4 * math.exp(-(t % BEAT) / 0.12) * float(sstep(3.4, 5.0, t))
         else:
             v = (t - BREAK) / BAR
             p = math.exp(-((t - BREAK) % (BEAT / (1 + int(v * 3)))) / 0.12)
-        return I, 0.75 + 0.5 * I + 0.12 * p, p
+        return I, (0.03 + 1.22 * grow + 0.12 * p) * grow, p
 
     def code_logo(self, tl, I, sc, p, dim, fi, rate=1.0):
         """fine grid: the page of code at typing time tl, the logo formed out of it, the star's light.
@@ -457,7 +458,8 @@ class Show:
         # the star's light: glow, long arms along its axes, thin rays, warming the code it touches
         if I > 0:
             a, bb = self.star_ab
-            star = star_sdf(dx, dy, a * sc, bb * sc) < 0
+            star = star_sdf(dx, dy, max(a * sc, 1e-3), max(bb * sc, 1e-3)) < 0
+            sb = min(1.0, I * 3.5)                          # the star fades up as it grows
             ang = np.arctan2(dy, dx)
             glow = np.exp(-np.hypot(dx / 1.8, dy) / (14 + 95 * I)) * I * (0.85 + 0.3 * p)
             arms = (np.exp(-np.abs(dy) / 6) * np.exp(-np.abs(dx) / (80 + 650 * I)) +
@@ -472,8 +474,8 @@ class Show:
             col = np.where(lit[..., None], lcol * np.clip(0.3 + 0.85 * light, 0, 1)[..., None], col)
             ray = (rays > 0.3) & ~lg & ~star & (rays > glow)
             idx = np.where(ray, stroke_glyph(ang), idx)
-            idx = np.where(star, glyphs(np.ones_like(light), int(tl * 12), (FROWS, FCOLS)), idx)
-            col = np.where(star[..., None], WHITE, col)
+            idx = np.where(star, glyphs(np.full_like(light, 0.35 + 0.65 * sb), int(tl * 12), (FROWS, FCOLS)), idx)
+            col = np.where(star[..., None], GOLD * (1 - sb) + WHITE * sb, col)
         return idx, np.clip(col, 0, 1).astype(np.float32)
 
     def hands_over(self, idx, col, t, I):
