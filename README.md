@@ -25,6 +25,15 @@ python code_to_monalisa.py --image full_painting.jpg --eye X Y   # use a bigger 
 python code_to_monalisa.py --no-audio
 ```
 
+## 3. 2ND SUN stage visual concept (9:16, cut to music)
+`stage.load("2ND SUN")`, code falls into the logo on the beat, the riser tears it, the break
+leaves only the star in the logo, the drop turns it into a sun, a tunnel, a strobe, then two
+hands drawn in code reach for each other and the star sparks between the fingertips.
+Timed to 126 BPM with the drop 9.52s in; `--start` picks where to cut the track.
+```
+python second_sun.py --music track.mp3 --start 236.32 --handle @you --export second_sun.mp4
+```
+
 ## Ideas for next ones
 - Logo reveal for clients: code assembles into a brand logo
 - Any photo or painting as the final reveal
