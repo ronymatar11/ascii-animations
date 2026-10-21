@@ -10,7 +10,7 @@ dive into the pupil: the two dots in it grow into two moons ->
 a rocket comes in from out of frame and burns A SPACE ODYSSEY in as it passes ->
 it comes back close to the camera and its giant trail paints the date: FRI OCT 30.
 
-Export:   python second_sun.py --music track.mp3 --start 236.32 --handle @you --export second_sun.mp4
+Export:   python second_sun.py --music track.mp3 --start 236.32 --handle @rony_matar --export second_sun.mp4
           (--start = where to cut the track; the drop lands 9.52s in, 5 bars at 126 BPM)
 """
 import argparse, math, subprocess
@@ -291,7 +291,7 @@ def catmull(points, n=40):
 
 
 class Show:
-    def __init__(self, handle, seed=3):
+    def __init__(self, handle="@rony_matar", seed=3):
         rng = np.random.default_rng(seed)
         self.handle = handle
         m = np.asarray(Image.open("assets/2ndsun_logo_mask.png").convert("L"), np.float32) / 255.0
@@ -634,18 +634,30 @@ class Show:
         return dict(mask=mask, col=col, b=b, glyph=g, edge=edge & (d > -FCW * 0.8), eglyph=eg, shadow=shadow)
 
     def paint_letters(self, idx, col, look, t_on, t, alpha=1.0):
-        """letters appear where t >= t_on, white-hot first, cooling into their paint"""
-        on = t >= t_on
-        age = np.clip(t - t_on, 0, None)
-        hot = np.exp(-age / 0.35)[..., None]
-        shimmer = (0.88 + 0.18 * np.sin(FGX * 0.015 + FGY * 0.01 - t * 3))[..., None]
-        fill = look["mask"] & on & ~look["edge"]
-        c = np.clip((look["col"] * shimmer * (1 - hot) + np.array([1.0, 0.95, 0.85]) * hot) * alpha, 0, 1)
-        idx = np.where(fill, look["glyph"], idx)
-        col = np.where(fill[..., None], c, col)
-        e = look["edge"] & on
-        idx = np.where(e, look["glyph"], idx)
-        col = np.where(e[..., None], np.clip((np.array([1.0, 0.95, 0.85]) * (1 - hot) + WHITE * hot) * alpha * 1.1, 0, 1), col)
+        """letters decode in where t >= t_on (random code, white-hot, locking in cell by cell),
+        then keep living: code flows through them, a light wave crosses them, glitter"""
+        t_on = t_on + 0.3 * self.frand
+        age = t - t_on
+        m = look["mask"]
+        on = m & (age >= 0)
+        decoding = on & (age < 0.4)
+        hot = np.exp(-np.clip(age, 0, None) / 0.45)[..., None]
+        # code flowing through the letters
+        ci = (np.arange(FCOLS)[None, :] + np.floor(self.logo_v * t * 0.7).astype(int)[:, None]) % FCOLS
+        g = np.take_along_axis(look["glyph"], ci, 1)
+        wave = np.sin(FGX * 0.012 - FGY * 0.006 - t * 2.6)
+        shimmer = (0.8 + 0.3 * wave)[..., None]
+        sweep = np.exp(-((FGX - FGY * 0.4 - ((t * 420) % 1900) + 500) / 60) ** 2)[..., None]
+        paint = look["col"] * shimmer + sweep * 0.5
+        edge = look["edge"]
+        paint = np.where(edge[..., None], np.array([1.0, 0.95, 0.85]) * (0.9 + 0.15 * wave[..., None]), paint)
+        c = np.clip((paint * (1 - hot) + WHITE * hot) * alpha, 0, 1)
+        rng = np.random.default_rng(int(t * 30) + 17)
+        glitter = on & (rng.random((FROWS, FCOLS)) < 0.02)
+        g = np.where(decoding | glitter, rng.choice(PRINTABLE, (FROWS, FCOLS)), g)
+        c = np.where(glitter[..., None] & ~decoding[..., None], np.clip(c * 1.35, 0, 1), c)
+        idx = np.where(on, g, idx)
+        col = np.where(on[..., None], c, col)
         return idx, col
 
     def pupil_px(self, t):
@@ -660,9 +672,12 @@ class Show:
         rp = IRIS_R * (0.34 + 0.07) * EU * ZE
         k = float(smoother(T_DIVE, T_END + 0.4, t))
         out = []
-        for (ox, oy, rr), (mx, my, R, _) in zip(DOTS, MOONS):
+        w = float(sstep(T_END - 0.3, T_END + 1.2, t))          # once they're moons they drift around
+        for i, ((ox, oy, rr), (mx, my, R, _)) in enumerate(zip(DOTS, MOONS)):
             x0, y0, r0 = 540 + ox * rp, 960 + oy * rp, rr * rp
-            out.append((x0 + (mx - x0) * k, y0 + (my - y0) * k, r0 * (R / r0) ** k))
+            mx += w * (55 * math.sin(t * 0.45 + 2.1 * i) + 25 * math.sin(t * 0.9 + i))
+            my += w * (40 * math.sin(t * 0.33 + 1.3 + 2 * i))
+            out.append((x0 + (mx - x0) * k, y0 + (my - y0) * k, r0 * (R / r0) ** k * (1 + 0.03 * w * math.sin(t * 0.7 + i))))
         return out
 
     def moon_fields(self, X, Y, t, moons, cells_shape):
@@ -671,12 +686,15 @@ class Show:
             dx, dy = (X - mx) / R, (Y - my) / R
             d = np.hypot(dx, dy)
             inside = d < 1
-            rot = t * 0.015
-            tex = fbm(dx * 3.2 + rot + 7, dy * 3.2 + 3, 4, 31 if R1 > 150 else 41)
-            maria = sstep(0.48, 0.62, fbm(dx * 1.4 + rot + 2, dy * 1.4 + 9, 3, 37 if R1 > 150 else 47))
-            crater = sstep(0.62, 0.7, fbm(dx * 9 + rot * 3, dy * 9, 2, 53))
+            # sphere coordinates, so the surface turns around the globe
+            zz = np.sqrt(np.clip(1 - d ** 2, 0, 1))
+            lon = np.arctan2(dx, zz) + t * (0.32 if R1 > 150 else -0.45)
+            lat = np.arcsin(np.clip(dy, -1, 1))
+            tex = fbm(lon * 2.2 + 7, lat * 3.2 + 3, 4, 31 if R1 > 150 else 41)
+            maria = sstep(0.44, 0.56, fbm(lon * 1.5 + 2, lat * 1.8 + 9, 3, 37 if R1 > 150 else 47))
+            crater = sstep(0.62, 0.7, fbm(lon * 6.5, lat * 9, 2, 53))
             limb = np.sqrt(np.clip(1 - d ** 2, 0, 1))
-            mb = (0.62 + 0.38 * tex - 0.32 * maria - 0.18 * crater) * (0.72 + 0.28 * limb)
+            mb = (0.6 + 0.4 * tex - 0.48 * maria - 0.25 * crater) * (0.62 + 0.38 * limb)
             halo = 0.38 * np.exp(-np.maximum(d - 1, 0) / 0.16) * (d >= 1)
             b = np.where(inside, np.clip(mb, 0, 1), np.maximum(b, halo))
             col = np.where(inside[..., None], mc * (0.75 + 0.25 * (1 - maria[..., None])),
@@ -789,6 +807,7 @@ class Show:
         tw = 0.45 + 0.55 * np.sin(t * self.star_sp + self.star_ph)
         for (r, c), v, big in zip(self.star_rc, tw, self.star_big):
             if v < 0.15: continue
+            c = (c + int(t * (5 if big else 9))) % FCOLS
             c_ = WHITE * (0.3 + 0.7 * v)
             if big and v > 0.5:
                 idx[r, c] = CI["+"]; col[r, c] = c_
@@ -995,6 +1014,6 @@ if __name__ == "__main__":
     ap.add_argument("--export", default="second_sun.mp4")
     ap.add_argument("--music", default=None, help="audio file to cut the video to")
     ap.add_argument("--start", type=float, default=236.32, help="seconds into the track to start (drop lands 9.52s later)")
-    ap.add_argument("--handle", default="@yourhandle")
+    ap.add_argument("--handle", default="@rony_matar")
     a = ap.parse_args()
     export(a.export, a.music, a.start, a.handle)

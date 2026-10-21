@@ -34,7 +34,7 @@ grow into two moons, a rocket comes in from out of frame and burns A SPACE ODYSS
 passes, then comes back close to the camera and its giant trail paints the date: FRI OCT 30.
 Timed to 126 BPM with the drop 9.52s in; `--start` picks where to cut the track.
 ```
-python second_sun.py --music track.mp3 --start 236.32 --handle @you --export second_sun.mp4
+python second_sun.py --music track.mp3 --start 236.32 --handle @rony_matar --export second_sun.mp4
 ```
 
 ## Ideas for next ones
