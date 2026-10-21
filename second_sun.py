@@ -6,7 +6,7 @@ code fills the page -> the code forms the logo, and as it forms the star inside 
 starts to shine -> two hands drawn in code reach in and meet on the star -> on the
 drop it explodes into a sun with the logo stamped in it -> the sun becomes an iris,
 the camera pulls back: one big eye -> it looks around on the beat and stares at you ->
-dive into the pupil -> inside, an old phone drops in spinning and types "you need me" ->
+dive into the pupil -> inside, an old phone drops in spinning, its screen lights up ->
 it turns into code, the code forms the logo again -> let's work together.
 
 Export:   python second_sun.py --music track.mp3 --start 236.32 --handle @you --export second_sun.mp4
@@ -296,9 +296,16 @@ class Show:
         R = self.rand = rng.random((ROWS, COLS))
         self.glyph_rand = rng.choice(PRINTABLE, (ROWS, COLS))
         self.build_page(rng)
-        # the code forms the logo outward from the star
-        rs = np.hypot(FGX - sx, (FGY - sy) * 1.3)
-        self.T_form = 2.7 + 2.3 * np.clip(rs / 620, 0, 1) + 0.25 * rng.random((FROWS, FCOLS))
+        # the logo is typed with the page: gaps between words inside it take their neighbour's time
+        lt = self.page_t.copy()
+        for r in range(FROWS):
+            row = lt[r]
+            fin = np.isfinite(row)
+            if fin.any():
+                k = np.maximum.accumulate(np.where(fin, np.arange(FCOLS), -1))
+                first = np.argmax(fin)
+                row[:] = np.where(k >= 0, row[np.maximum(k, 0)], row[first])
+        self.logo_t = lt
         # the logo is stamped into the sun on the drop, and melts back into it
         self.T_stamp = DROP + 0.15 + 0.45 * R
         self.T_melt = T_IRIS - 0.6 + 0.5 * R
@@ -407,36 +414,35 @@ class Show:
         dt = tl - pt
         typed = dt >= 0
         idx = np.where(typed, np.take_along_axis(self.page_idx, ci, 1), 0)
-        fresh = np.exp(-np.clip(dt, 0, None) / 0.1)[..., None]
-        col = np.take_along_axis(self.page_col, ci[..., None], 1) * (1 - fresh) + fresh
+        # the page is typed straight in its quiet colour (nothing gets recoloured later)
+        col = np.take_along_axis(self.page_col, ci[..., None], 1)
+        grey = col.mean(-1, keepdims=True) * np.array([0.8, 0.85, 1.0])
+        col = (col * 0.4 + grey * 0.6) * dim
         rng = np.random.default_rng(fi)
         retype = typed & (idx > 0) & (rng.random((FROWS, FCOLS)) < 0.006)     # lines being rewritten
         idx[retype] = rng.choice(PRINTABLE, int(retype.sum()))
-        col[retype] = 1.0
         head = (dt < 0) & (dt > -0.025)
         idx = np.where(head, BLOCK, idx)
         col = np.where(head[..., None], np.array([0.8, 0.82, 0.85]), col)
 
-        # the logo forms out of the code; outside it the code steps back
+        # the logo is typed straight in its own colour as the code reaches it
         dx, dy = FGX - sx, FGY - sy
         r = np.hypot(dx, dy)
         L = self.flogo > 0.5
-        formed = tl >= self.T_form
-        lg = L & formed
+        ldt = tl - self.logo_t
+        lg = L & (ldt >= 0)
         heat = np.clip(np.exp(-r / (140 + 420 * I)) * I * 1.3, 0, 1)[..., None]
-        pop = np.exp(-np.clip(tl - self.T_form, 0, None) / 0.18)[..., None]
         shimmer = (0.82 + 0.28 * np.sin(FGX * 0.018 + FGY * 0.006 - tl / rate * 4.0))[..., None]
-        lc = (CREAM * (1 - heat) + GOLD * heat) * (1 + 0.5 * pop) * shimmer
+        lc = (CREAM * (1 - heat) + GOLD * heat) * shimmer
         # code keeps flowing through the letters
         lci = (cols + np.floor(self.logo_v * tl / rate).astype(int)[:, None]) % FCOLS
         idx = np.where(lg, np.take_along_axis(self.logo_idx, lci, 1), idx)
         col = np.where(lg[..., None], lc, col)
-        grey = col.mean(-1, keepdims=True) * np.array([0.8, 0.85, 1.0])
-        col = np.where((~L & formed)[..., None], (col * 0.4 + grey * 0.6) * dim, col)
-        flip = L & (tl >= self.T_form - 0.08) & (tl < self.T_form)
-        flip |= lg & (rng.random((FROWS, FCOLS)) < 0.012)                   # glitter in the letters
-        idx[flip] = rng.choice(PRINTABLE, int(flip.sum()))
-        col[flip] = (0.75, 0.95, 1.0)
+        lhead = L & (ldt < 0) & (ldt > -0.025)
+        idx = np.where(lhead, BLOCK, idx)
+        col = np.where(lhead[..., None], lc, col)
+        glitter = lg & (rng.random((FROWS, FCOLS)) < 0.012)                 # letters keep flickering
+        idx[glitter] = rng.choice(PRINTABLE, int(glitter.sum()))
 
         # the star's light: glow, long arms along its axes, thin rays, warming the code it touches
         if I > 0:
@@ -522,7 +528,7 @@ class Show:
         return idx, col.astype(np.float32)
 
     def phone_text(self, img, t):
-        """the message, typed on the green screen once the phone has landed"""
+        """the green screen once the phone has landed: a new message, a blinking cursor"""
         u = t - T_PHONE
         if u < 1.9:
             return img
@@ -532,9 +538,8 @@ class Show:
         im = Image.fromarray(img); dr = ImageDraw.Draw(im)
         green = (120, 255, 140)
         dr.text((x0 + 14, top + 14), "1 NEW MESSAGE", font=find_font(19), fill=(90, 200, 110))
-        s, typing = typed("you need me", t, T_PHONE + 2.15, 7.5)
-        cur = "\u2588" if typing or (t * 2.5) % 2 < 1 else ""
-        dr.text((x0 + 14, top + 64), s + cur, font=find_font(34), fill=green)
+        if (t * 2.5) % 2 < 1:
+            dr.text((x0 + 14, top + 64), "\u2588", font=find_font(34), fill=green)
         return np.asarray(im)
 
     def end_frame(self, t, fi):

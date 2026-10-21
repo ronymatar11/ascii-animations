@@ -30,7 +30,7 @@ One continuous code transformation, no cuts: code fills the page and forms the l
 star inside it starts to shine, two hands drawn in code reach in and meet on the star, on
 the drop it explodes into a sun, the sun becomes the iris of one big eye that looks around on
 the beat, the camera dives into the pupil, an old brick phone drops in spinning (ray-traced into
-characters) and types "you need me", then it breaks into code and the code forms the logo again.
+characters) and its screen lights up, then it breaks into code and the code forms the logo again.
 Timed to 126 BPM with the drop 9.52s in; `--start` picks where to cut the track.
 ```
 python second_sun.py --music track.mp3 --start 236.32 --handle @you --export second_sun.mp4
