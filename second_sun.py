@@ -13,7 +13,7 @@ it comes back close to the camera and its giant trail paints the date: FRI OCT 3
 Export:   python second_sun.py --music track.mp3 --start 236.32 --handle @rony_matar --export second_sun.mp4
           (--start = where to cut the track; the drop lands 9.52s in, 5 bars at 126 BPM)
 """
-import argparse, math, subprocess
+import argparse, math, os, subprocess
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
@@ -294,7 +294,7 @@ class Show:
     def __init__(self, handle="@rony_matar", seed=3):
         rng = np.random.default_rng(seed)
         self.handle = handle
-        m = np.asarray(Image.open("assets/2ndsun_logo_mask.png").convert("L"), np.float32) / 255.0
+        m = np.asarray(Image.open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "2ndsun_logo_mask.png")).convert("L"), np.float32) / 255.0
         self.mask = m
         self.mh, self.mw = m.shape
         self.logo_sun = self.logo_field(GX, GY, 540, 960, 760)
