@@ -28,12 +28,15 @@ python code_to_monalisa.py --no-audio
 ## 3. 2ND SUN stage visual concept (9:16, cut to music)
 One continuous code transformation, no cuts: code fills the page and forms the logo, the
 star inside it starts to shine, two hands drawn in code reach in and meet on the star, on
-the drop it explodes into a sun, the sun becomes the iris of one big eye that looks around on
-the beat, the camera dives into the pupil, an old brick phone drops in spinning (ray-traced into
-characters) and types "you need me", then the phone melts straight into the logo and the star lights up again.
-Timed to 126 BPM with the drop 9.52s in; `--start` picks where to cut the track.
+the drop it explodes into a sun, the sun becomes the iris of one big eye that floats and looks
+around on the beat. The camera dives into the pupil, the two dots in it grow into two moons,
+the second song starts, a rocket comes in from out of frame and writes A SPACE ODYSSEY with
+its trail, and everything melts into the date: FRI OCT 30.
+The first part is timed to 126 BPM with the drop 9.52s in; `--start` / `--start2` pick where
+to cut each track.
 ```
-python second_sun.py --music track.mp3 --start 236.32 --handle @you --export second_sun.mp4
+python second_sun.py --music track.mp3 --start 236.32 --music2 track2.mp3 --start2 19.0 \
+    --handle @you --export second_sun.mp4
 ```
 
 ## Ideas for next ones

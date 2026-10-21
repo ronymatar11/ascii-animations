@@ -6,10 +6,11 @@ code fills the page -> the code forms the logo, and as it forms the star inside 
 starts to shine -> two hands drawn in code reach in and meet on the star -> on the
 drop it explodes into a sun with the logo stamped in it -> the sun becomes an iris,
 the camera pulls back: one big eye -> it looks around on the beat and stares at you ->
-dive into the pupil -> inside, an old phone drops in spinning and types "you need me" ->
-the phone melts into the logo and the star lights up again -> let's work together.
+dive into the pupil: the two dots in it grow into two moons, the second song starts ->
+a rocket comes in from out of frame and writes A SPACE ODYSSEY with its trail ->
+everything melts into the date: FRI OCT 30.
 
-Export:   python second_sun.py --music track.mp3 --start 236.32 --handle @you --export second_sun.mp4
+Export:   python second_sun.py --music track.mp3 --start 236.32 --music2 track2.mp3 --start2 19.0 --handle @you --export second_sun.mp4
           (--start = where to cut the track; the drop lands 9.52s in, 5 bars at 126 BPM)
 """
 import argparse, math, subprocess
@@ -21,7 +22,7 @@ from code_to_monalisa import (W, H, CW, CH, COLS, ROWS, OY, CI, CHARS, BLOCK, PR
                               colorize)
 
 FPS = 30
-DUR = 28.6
+DUR = 30.55
 BPM = 126.05
 BEAT = 60 / BPM
 BAR = 4 * BEAT
@@ -31,11 +32,12 @@ T_HANDS_IN = 2.8                          # the hands start reaching for the sta
 T_IRIS = DROP + 1.6 * BAR                 # the sun turns into an iris
 T_PULL = DROP + 1.8 * BAR                 # camera pulls back: it's an eye
 T_DIVE = DROP + 4.5 * BAR                 # dive into the pupil
-T_END = DROP + 5 * BAR                    # 19.05s: inside the pupil, an old phone drops in
-T_PHONE = T_END
-T_OUTRO = T_PHONE + 2 * BAR + 2 * BEAT    # 23.81s: the phone melts into the logo
-MORPH = 1.1                               # the phone melts into the logo
-T_CARD = T_OUTRO + 2.1                    # let's work together
+T_END = DROP + 5 * BAR                    # 19.05s: inside the pupil, space; the second song starts
+T_ROCKET = T_END + 0.3                    # a rocket comes in from out of frame
+ROCKET_DUR = 4.4
+T_TYPO = T_END + 6.2                      # everything melts into the date
+TYPO_MORPH = 1.3
+T_FOOT = T_TYPO + 2.0
 
 CREAM = np.array([0.99, 0.92, 0.82], np.float32)
 GOLD = np.array([1.0, 0.82, 0.45], np.float32)
@@ -209,102 +211,55 @@ def mask_sdf(mask, sx=FCW, sy=FCH):
         return d
     return dist(mask) - dist(~mask)
 
-# ------------------------------------------------------------------ the old phone, ray-traced into characters
-def rbox(px, py, pz, bx, by, bz, r):
-    qx, qy, qz = np.abs(px) - bx, np.abs(py) - by, np.abs(pz) - bz
-    out = np.sqrt(np.maximum(qx, 0) ** 2 + np.maximum(qy, 0) ** 2 + np.maximum(qz, 0) ** 2)
-    return out + np.minimum(np.maximum(qx, np.maximum(qy, qz)), 0) - r
 
-def phone_sdf(x, y, z):
-    d = rbox(x, y, z, 112, 310, 34, 18)                                   # body
-    d = smin(d, rbox(x, y + 300, z, 118, 42, 40, 22), 30)                 # flared mouthpiece
-    d = np.minimum(d, rbox(x - 72, y - 430, z, 6, 110, 6, 6))             # antenna
-    d = np.minimum(d, np.sqrt((x - 72) ** 2 + (y - 548) ** 2 + z ** 2) - 15)  # antenna tip
-    return d
+# ------------------------------------------------------------------ space: two moons, a rocket, the date
+MOONS = [(330.0, 880.0, 215.0, np.array([1.0, 0.9, 0.7], np.float32)),     # x, y, radius, colour
+         (815.0, 330.0, 118.0, np.array([0.92, 0.88, 0.82], np.float32))]
+DOTS = [(-0.38, 0.30, 0.30), (0.42, -0.38, 0.18)]   # in the pupil: offset (x, y down) and radius, x pupil radius
+TRAIL_PATH = [(-300, 1870), (150, 1850), (560, 1800), (900, 1700), (1095, 1430), (1075, 1090),
+              (820, 770), (530, 560), (290, 360), (-320, -80)]
+TRAIL_COLS = np.array([[0.88, 0.25, 0.2], [0.98, 0.52, 0.27], [1.0, 0.9, 0.78],
+                       [0.62, 0.6, 0.58], [0.98, 0.66, 0.52]], np.float32)
+RED = np.array([0.92, 0.3, 0.22], np.float32)
+BIG_FONTS = ["/usr/share/fonts/opentype/inter/Inter-ExtraBold.otf", "Inter-ExtraBold.otf",
+             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", "DejaVuSans-Bold.ttf", "arialbd.ttf"]
 
-LCD = (-92, 92, 182, 290)                 # x0, x1, y0, y1 on the front face
-KEYS = [(kx, ky, lab) for ky, row in zip((105, 35, -35, -105, -175), ("123", "456", "789", "*0#", "<>!"))
-        for kx, lab in zip((-74, 0, 74), row)]
+def big_font(size):
+    for f in BIG_FONTS:
+        try:
+            return ImageFont.truetype(f, size)
+        except OSError:
+            pass
+    return find_font(size)
 
+def text_mask(lines, cy, height, max_w=1000, gap=0.08, cx=W / 2):
+    """big text rendered to a fine-grid mask, lines stacked, centred at (cx, cy)"""
+    hi = Image.new("L", (W, H), 0)
+    dr = ImageDraw.Draw(hi)
+    n = len(lines)
+    lh = height / (n + gap * (n - 1))
+    size = int(lh * 1.25)
+    f = big_font(size)
+    while max(f.getlength(l) for l in lines) > max_w and size > 10:
+        size -= 4; f = big_font(size)
+    y = cy - height / 2
+    for l in lines:
+        dr.text((cx, y + lh / 2), l, font=f, fill=255, anchor="mm")
+        y += lh * (1 + gap)
+    a = np.asarray(hi, np.float32) / 255.0
+    return a[np.clip(FGY.astype(int), 0, H - 1), np.clip(FGX.astype(int), 0, W - 1)] > 0.5
 
-class Phone:
-    """drops in from above the frame spinning, bounces, buzzes, types on its screen"""
-    def pose(self, u):
-        # already coming in at the first frame, glides down, eases past and settles back once
-        y = PHONE_FROM + (PHONE_Y - PHONE_FROM) * float(smoother(0.0, 1.6, u))
-        y += 32 * math.sin(math.pi * min(max((u - 1.2) / 0.7, 0.0), 1.0))
-        th = 2 * math.pi * float(smoother(0.0, 1.8, u))                     # one slow turn, ends facing us
-        ph = 0.22 * math.sin(u * 3.0) * math.exp(-u * 1.8)
-        return y, th, ph
-
-    def fields(self, t):
-        u = t - T_PHONE
-        cy, th, ph = self.pose(u)
-        cx = 540.0 + 4 * kick(t) * math.sin(t * 90) * float(sstep(1.6, 1.8, u)) * (1 - float(sstep(T_OUTRO - T_PHONE - 0.3, T_OUTRO - T_PHONE, u)))   # buzz on the kick
-        b = np.zeros((FROWS, FCOLS)); col = np.zeros((FROWS, FCOLS, 3), np.float32)
-        lcd = np.zeros((FROWS, FCOLS), bool)
-        wx, wy = (FGX - cx) / PHONE_S, -(FGY - cy) / PHONE_S
-        m = (np.abs(wx) < 380) & (wy > -470) & (wy < 690)
-        rx, ry = wx[m], wy[m]
-        # world = tilt(ph) . spin(th) . phone; rays come from the viewer along -z
-        c1, s1, c2, s2 = math.cos(ph), math.sin(ph), math.cos(-th), math.sin(-th)
-        ox, oy = rx * c1 + ry * s1, -rx * s1 + ry * c1
-        o = np.stack([ox * c2 + 900 * s2, oy, -ox * s2 + 900 * c2], -1)
-        dvec = np.array([-s2, 0, -c2])
-        tt = np.zeros(len(rx)); hit = np.zeros(len(rx), bool)
-        for _ in range(48):
-            p = o + tt[:, None] * dvec
-            d = phone_sdf(p[:, 0], p[:, 1], p[:, 2])
-            hit |= d < 0.6
-            tt = np.where(hit, tt, tt + np.maximum(d, 0.5))
-            if (tt > 1800).all(): break
-        hit &= tt < 1800
-        if hit.any():
-            p = o[hit] + tt[hit][:, None] * dvec
-            e = 1.5
-            n = np.stack([phone_sdf(p[:, 0] + e, p[:, 1], p[:, 2]) - phone_sdf(p[:, 0] - e, p[:, 1], p[:, 2]),
-                          phone_sdf(p[:, 0], p[:, 1] + e, p[:, 2]) - phone_sdf(p[:, 0], p[:, 1] - e, p[:, 2]),
-                          phone_sdf(p[:, 0], p[:, 1], p[:, 2] + e) - phone_sdf(p[:, 0], p[:, 1], p[:, 2] - e)], -1)
-            n /= np.linalg.norm(n, axis=1, keepdims=True) + 1e-9
-            # light in phone space (fixed in the world, so rotate it with the phone)
-            L = np.array([-0.45, 0.55, 0.7]); L /= np.linalg.norm(L)
-            Lp = np.array([L[0] * c2 + L[2] * s2, L[1], -L[0] * s2 + L[2] * c2])
-            lam = np.clip(n @ Lp, 0, 1)
-            bb = 0.16 + 0.7 * lam
-            cc = np.tile(np.array([0.82, 0.8, 0.78], np.float32), (len(bb), 1))
-            front = (n[:, 2] > 0.75) & (p[:, 2] > 25)
-            x, y = p[:, 0], p[:, 1]
-            # earpiece slots
-            ear = front & (np.abs(x) < 55) & (y > 222 + 80) & (y < 262 + 80) & ((y.astype(int) // 7) % 2 == 0)
-            bb = np.where(ear, 0.05, bb)
-            # keypad
-            on_key = np.zeros(len(bb), bool)
-            for kx, ky, lab in KEYS:
-                k = front & (np.abs(x - kx) < 28) & (np.abs(y - ky) < 20)
-                on_key |= k
-            bb = np.where(on_key, np.clip(bb + 0.22, 0, 1), np.where(front & (y < 135) & (y > -205), bb * 0.6, bb))
-            cc = np.where(on_key[:, None], np.array([1.0, 0.93, 0.82]), cc)
-            # screen: dark until it wakes, then green
-            scr = front & (x > LCD[0]) & (x < LCD[1]) & (y > LCD[2]) & (y < LCD[3])
-            wake = float(sstep(1.6, 1.75, u)) * (0.85 + 0.15 * (math.sin(t * 40) > -0.6))
-            bb = np.where(scr, 0.05 + 0.33 * wake, bb)
-            cc = np.where(scr[:, None], np.array([0.45, 1.0, 0.55]), cc)
-            bi = np.zeros(m.sum()); bi[hit] = bb
-            ci = np.zeros((m.sum(), 3), np.float32); ci[hit] = cc
-            li = np.zeros(m.sum(), bool); li[hit] = scr
-            b[m], col[m], lcd[m] = bi, ci, li
-        # key labels: where each key's center lands on screen, while the front faces us
-        labels = []
-        if math.cos(th) > 0.8:
-            for kx, ky, lab in KEYS:
-                xs = kx * math.cos(th) + 36 * math.sin(th)
-                X, Y = xs * c1 - ky * s1, xs * s1 + ky * c1
-                labels.append((cx + X * PHONE_S, cy - Y * PHONE_S, lab))
-        return b, col, lcd, labels
-
-PHONE_Y = 930.0
-PHONE_FROM = 150.0                        # where the fall starts: the bottom of the phone already in frame
-PHONE_S = 1.35                            # phone units -> px
+def catmull(points, n=40):
+    P = np.array(points, float)
+    P = np.vstack([P[0], P, P[-1]])
+    out = []
+    for i in range(1, len(P) - 2):
+        p0, p1, p2, p3 = P[i - 1], P[i], P[i + 1], P[i + 2]
+        for s_ in np.linspace(0, 1, n, endpoint=False):
+            out.append(0.5 * ((2 * p1) + (-p0 + p2) * s_ + (2 * p0 - 5 * p1 + 4 * p2 - p3) * s_ ** 2 +
+                              (-p0 + 3 * p1 - 3 * p2 + p3) * s_ ** 3))
+    out.append(P[-2])
+    return np.array(out)
 
 
 class Show:
@@ -356,12 +311,8 @@ class Show:
         self.code_rows = [src[(7 * r) % len(src):] + src for r in range(FROWS)]
         self.rain_speed = rng.uniform(14, 30, FCOLS)
         self.rain_phase = rng.uniform(0, 40, FCOLS)
-        self.phone = Phone()
         self.frand = rng.random((FROWS, FCOLS))
-        # shapes for the phone -> logo morph: the phone's front silhouette and the logo, as distances
-        lx, ly = (FGX - 540) / PHONE_S, -(FGY - PHONE_Y) / PHONE_S
-        self.d_phone = phone_sdf(lx, ly, np.zeros_like(lx)) * PHONE_S
-        self.d_logo = mask_sdf(self.flogo > 0.5)
+        self.setup_space(rng)
 
     def build_page(self, rng):
         """a page of code on the fine grid: what each cell says, its color, when it gets typed"""
@@ -547,69 +498,202 @@ class Show:
             idx, col = self.hands_over(idx, col, t, I)
         return idx, col
 
-    def phone_frame(self, t, fi, phone=True):
-        """inside the pupil: dim code drifting in the dark, the phone falling through it"""
-        if phone:
-            b, pc, lcd, labels = self.phone.fields(t)
-        else:
-            b, pc, lcd, labels = np.zeros((FROWS, FCOLS)), np.zeros((FROWS, FCOLS, 3)), np.zeros((FROWS, FCOLS), bool), []
-        rr = np.arange(FROWS)[:, None]
-        ph = (rr - t * self.rain_speed[None, :] * 0.6 - self.rain_phase[None, :] * 3) % 45
-        rain = (ph < 4) & (self.frand < 0.5)
-        idx = np.where(rain, self.page_idx, 0)
-        col = np.broadcast_to(np.array([0.45, 0.55, 0.75], np.float32), (FROWS, FCOLS, 3)) * \
-            (0.12 + 0.18 * (1 - ph / 4)).clip(0, 0.3)[..., None]
-        on = self.phone_on = b > 0.02
-        idx = np.where(on, glyphs(np.clip(b, 0, 1), int(t * 12), (FROWS, FCOLS)), idx)
-        col = np.where(on[..., None], pc * np.clip(0.35 + 0.8 * b, 0, 1)[..., None], col)
-        idx = np.where(lcd & (b < 0.2), 0, idx)          # the screen stays dark under the text
-        for (x, y, lab) in labels:
-            r, c = int(round((y - FOY) / FCH - 0.5)), int(round(x / FCW - 0.5))
-            if 0 <= r < FROWS and 0 <= c < FCOLS and lab in CI:
-                idx[r, c] = CI[lab]; col[r, c] = (0.15, 0.12, 0.1)
-        return idx, col.astype(np.float32)
 
-    def phone_text(self, img, t):
-        """the green screen once the phone has landed: a new message, typed"""
-        u = t - T_PHONE
-        if u < 1.75:
-            return img
-        y0, _, _ = self.phone.pose(u)
-        x0 = 540 + LCD[0] * PHONE_S
-        top = y0 - LCD[3] * PHONE_S
-        im = Image.fromarray(img); dr = ImageDraw.Draw(im)
-        f = 1 - float(sstep(T_OUTRO, T_OUTRO + 0.35, t))              # fades as the phone melts
-        green = tuple(int(c * f) for c in (120, 255, 140))
-        dr.text((x0 + 14, top + 14), "1 NEW MESSAGE", font=find_font(19), fill=tuple(int(c * f) for c in (90, 200, 110)))
-        s, typing = typed("you need me", t, T_PHONE + 1.95, 7.5)
-        cur = "\u2588" if typing or (t * 2.5) % 2 < 1 else ""
-        dr.text((x0 + 14, top + 64), s + cur, font=find_font(34), fill=green)
-        return np.asarray(im)
+    # ---------- 3. space
+    def setup_space(self, rng):
+        # stars and a bit of grain, like the print
+        n = 300
+        self.star_rc = np.stack([rng.integers(0, FROWS, n), rng.integers(0, FCOLS, n)], 1)
+        self.star_ph = rng.uniform(0, 6.3, n); self.star_sp = rng.uniform(1.5, 4.5, n)
+        self.star_big = rng.random(n) < 0.06
+        # rocket path, evenly sampled by length
+        P = catmull(TRAIL_PATH, 60)
+        seg = np.hypot(*np.diff(P, axis=0).T)
+        L = np.concatenate([[0], np.cumsum(seg)])
+        self.path_L = np.arange(0, L[-1], 6.0)
+        self.path = np.stack([np.interp(self.path_L, L, P[:, 0]), np.interp(self.path_L, L, P[:, 1])], 1)
+        tg = np.gradient(self.path, axis=0)
+        self.path_T = tg / (np.linalg.norm(tg, axis=1, keepdims=True) + 1e-9)
+        # the title the rocket writes, and the date everything becomes
+        self.title = text_mask(["A SPACE", "ODYSSEY"], 1500, 320, max_w=760, cx=440, gap=0.1)
+        self.typo = text_mask(["FRI", "OCT", "30"], 860, 1240, max_w=900, gap=0.04)
+        self.d_typo = mask_sdf(self.typo)
+        b, col, sidx, scene = self.space_layers(T_TYPO, 0)
+        self.d_scene = mask_sdf(scene)
+        # when the pupil's black has filled the screen, the space scene takes over (fine grid)
+        self.t_space = T_END
+        for tt in np.arange(T_DIVE, T_END, 1 / FPS):
+            if self.pupil_px(tt) > 1150:
+                self.t_space = tt; break
 
-    def end_frame(self, t, fi):
-        """the phone melts into the logo, the star inside it lights up again"""
-        k = kick(t) * (1 - float(sstep(DUR - 3, DUR - 1, t)))
-        a = float(smoother(T_OUTRO, T_OUTRO + MORPH, t))
-        I = (0.55 + 0.08 * math.sin(t * 2.2)) * float(sstep(T_OUTRO + MORPH - 0.3, T_OUTRO + MORPH + 0.7, t))
-        lidx, lcol = self.code_logo(60 + t - T_OUTRO, I, 1.0 + 0.12 * k, k, 0.0, fi)   # logo + light, no page
-        pidx, pcol = self.phone_frame(t, fi, phone=a < 1)
-        if a >= 1:
-            show = lidx > 0
-            light = show & (lcol.max(-1) > 0.03)
-            return np.where(light, lidx, pidx), np.where(light[..., None], lcol, pcol)
-        inside = (self.d_phone * (1 - a) + self.d_logo * a) < 0
-        phone_cell = inside & self.phone_on
-        logo_char = np.where(lidx > 0, lidx, self.logo_idx)
-        take_logo = self.frand < a
-        idx = np.where(inside, np.where(take_logo | ~phone_cell, logo_char, pidx), pidx)
-        base = np.where(phone_cell[..., None], pcol, np.array([0.55, 0.53, 0.5]) * 0.8)
-        lc = np.where((lcol.max(-1) > 0.05)[..., None], lcol, CREAM * 0.9)
-        col = np.where(inside[..., None], base * (1 - a) + lc * a, pcol)
-        # whatever of the phone is outside the shape is gone; its light comes in with the logo
-        idx = np.where(~inside & self.phone_on, 0, idx)
-        glow = ~inside & (self.flogo <= 0.5) & (lidx > 0) & (lcol.max(-1) > 0.03)
-        idx = np.where(glow & (self.frand < a), lidx, idx)
-        col = np.where((glow & (self.frand < a))[..., None], lcol, col)
+    def pupil_px(self, t):
+        z = ZE * math.exp(math.log(40) * float(smoother(T_DIVE, T_END, t)) ** 2)
+        rp = IRIS_R * (0.34 + 0.07 + 0.5 * float(smoother(T_DIVE, T_END - 0.2, t)))
+        return rp * EU * z
+
+    def moon_state(self, t, nat=None):
+        """the two dots in the pupil -> the two moons, as (x, y, r) per moon"""
+        if t < T_DIVE and nat is not None:
+            return nat
+        rp = IRIS_R * (0.34 + 0.07) * EU * ZE
+        k = float(smoother(T_DIVE, T_END + 0.4, t))
+        out = []
+        for (ox, oy, rr), (mx, my, R, _) in zip(DOTS, MOONS):
+            x0, y0, r0 = 540 + ox * rp, 960 + oy * rp, rr * rp
+            out.append((x0 + (mx - x0) * k, y0 + (my - y0) * k, r0 * (R / r0) ** k))
+        return out
+
+    def moon_fields(self, X, Y, t, moons, cells_shape):
+        b = np.zeros(cells_shape); col = np.zeros(cells_shape + (3,), np.float32); disk = np.zeros(cells_shape, bool)
+        for (mx, my, R), (_, _, R1, mc) in zip(moons, MOONS):
+            dx, dy = (X - mx) / R, (Y - my) / R
+            d = np.hypot(dx, dy)
+            inside = d < 1
+            rot = t * 0.015
+            tex = fbm(dx * 3.2 + rot + 7, dy * 3.2 + 3, 4, 31 if R1 > 150 else 41)
+            maria = sstep(0.48, 0.62, fbm(dx * 1.4 + rot + 2, dy * 1.4 + 9, 3, 37 if R1 > 150 else 47))
+            crater = sstep(0.62, 0.7, fbm(dx * 9 + rot * 3, dy * 9, 2, 53))
+            limb = np.sqrt(np.clip(1 - d ** 2, 0, 1))
+            mb = (0.62 + 0.38 * tex - 0.32 * maria - 0.18 * crater) * (0.72 + 0.28 * limb)
+            halo = 0.38 * np.exp(-np.maximum(d - 1, 0) / 0.16) * (d >= 1)
+            b = np.where(inside, np.clip(mb, 0, 1), np.maximum(b, halo))
+            col = np.where(inside[..., None], mc * (0.75 + 0.25 * (1 - maria[..., None])),
+                           np.where(((halo >= b) & (halo > 0.02))[..., None], np.array([0.8, 0.78, 0.74]), col))
+            disk |= inside
+        return b, col, disk
+
+    def rocket_s(self, t):
+        """distance the rocket has travelled along its path"""
+        x = float(smoother(T_ROCKET, T_ROCKET + ROCKET_DUR, t))
+        x = 0.55 * x + 0.45 * min(max((t - T_ROCKET) / ROCKET_DUR, 0), 1)   # keeps moving through the curve
+        return x * self.path_L[-1]
+
+    def space_layers(self, t, fi):
+        """fine grid: background (stars, grain) and the scene (moons, trail, rocket, title), plus scene mask"""
+        X, Y = FGX, FGY
+        shape = (FROWS, FCOLS)
+        # moons
+        b, col, disk = self.moon_fields(X, Y, t, self.moon_state(t), shape)
+        scene = disk.copy()
+        sidx = np.zeros(shape, np.int64)
+        # the trail, painted behind the rocket
+        Lr = self.rocket_s(t)
+        n = int(np.searchsorted(self.path_L, Lr))
+        if n > 1:
+            P = self.path[:n:2]; T = self.path_T[:n:2]; Lp = self.path_L[:n:2]
+            age = Lr - Lp
+            w = 16 + np.minimum(age * 0.12, 115)
+            best = np.full(shape, 1e9); lat = np.zeros(shape); jj = np.zeros(shape, int)
+            for j in range(0, len(P), 64):
+                ex = X[..., None] - P[None, None, j:j + 64, 0]
+                ey = Y[..., None] - P[None, None, j:j + 64, 1]
+                dd = np.hypot(ex, ey)
+                k = dd.argmin(-1)
+                m = np.take_along_axis(dd, k[..., None], -1)[..., 0]
+                better = m < best
+                kk = k + j
+                best = np.where(better, m, best)
+                jj = np.where(better, kk, jj)
+                lx = np.take_along_axis(ex, k[..., None], -1)[..., 0]
+                ly = np.take_along_axis(ey, k[..., None], -1)[..., 0]
+                lat = np.where(better, T[kk, 0] * ly - T[kk, 1] * lx, lat)
+            wj = w[jj] * (0.85 + 0.3 * fbm(Lp[jj] * 0.01, lat * 0.02, 2, 61))
+            tr = (best < wj) & (np.abs(lat) < wj)
+            band = np.clip((lat / wj + 1) / 2, 0, 1)
+            stripe = (np.floor(band * 6 + 0.8 * np.sin(Lp[jj] * 0.008 + band * 4)) % 5).astype(int)
+            streak = fbm(Lp[jj] * 0.03, band * 14, 3, 67)
+            tb = 0.72 + 0.28 * streak
+            tc = TRAIL_COLS[stripe]
+            hot = np.exp(-age[jj] / 70)[..., None]
+            tc = tc * (1 - hot) + np.array([1.0, 0.95, 0.8]) * hot
+            b = np.where(tr, np.maximum(tb, b * (~disk)), b)
+            col = np.where(tr[..., None], tc, col)
+            ang = np.arctan2(T[jj, 1], T[jj, 0])
+            sidx = np.where(tr & (streak > 0.45), stroke_glyph(np.arctan2(np.sin(ang) / FCH, np.cos(ang) / FCW)), sidx)
+            scene |= tr
+        # the title, written as the rocket sweeps past along the bottom
+        low = self.path[:n, 1] > 1500
+        reach = self.path[:n, 0][low].max() if low.any() else -999.0
+        if n > 0 and not low[-1]:
+            reach = 9999.0                                           # past the bottom sweep: all written
+        tl = self.title & (X < reach - 30)
+        b = np.where(tl, 0.92, b)
+        col = np.where(tl[..., None], RED * (0.85 + 0.25 * np.sin(X * 0.02 - t * 3))[..., None], col)
+        scene |= tl
+        # the rocket
+        if 0 < Lr < self.path_L[-1]:
+            i = min(n, len(self.path) - 1)
+            px, py = self.path[i]; dx, dy = self.path_T[i]
+            nx, ny = -dy, dx
+            tail = (px - dx * 95, py - dy * 95)
+            body = seg_sdf(X, Y, tail[0], tail[1], px + dx * 150, py + dy * 150, 34, 6)
+            fins = np.minimum(seg_sdf(X, Y, tail[0] + dx * 30 + nx * 22, tail[1] + dy * 30 + ny * 22,
+                                      tail[0] - dx * 35 + nx * 88, tail[1] - dy * 35 + ny * 88, 15, 4),
+                              seg_sdf(X, Y, tail[0] + dx * 30 - nx * 22, tail[1] + dy * 30 - ny * 22,
+                                      tail[0] - dx * 35 - nx * 88, tail[1] - dy * 35 - ny * 88, 15, 4))
+            win = np.hypot(X - (px + dx * 55), Y - (py + dy * 55)) < 11
+            side = ((X - px) * nx + (Y - py) * ny) / 34
+            rk = (body < 0) | (fins < 0)
+            rb = np.where(fins < 0, 0.75, 0.55 + 0.4 * np.clip(-side, -1, 1) * 0.5 + 0.25)
+            rc = np.where((fins < 0)[..., None], RED, np.array([0.95, 0.92, 0.86]))
+            rb = np.where(win, 0.1, rb)
+            b = np.where(rk, rb, b); col = np.where(rk[..., None], rc, col)
+            sidx = np.where(rk, 0, sidx)
+            scene |= rk
+        return b, col, sidx, scene
+
+    def space_bg(self, t, fi):
+        idx = np.zeros((FROWS, FCOLS), np.int64); col = np.zeros((FROWS, FCOLS, 3), np.float32)
+        rng = np.random.default_rng(fi)
+        grain = rng.random((FROWS, FCOLS)) < 0.05
+        idx[grain] = rng.choice(np.array([CI["."], CI[","], CI["'"], CI[":"]]), int(grain.sum()))
+        col[grain] = 0.16
+        tw = 0.45 + 0.55 * np.sin(t * self.star_sp + self.star_ph)
+        for (r, c), v, big in zip(self.star_rc, tw, self.star_big):
+            if v < 0.15: continue
+            c_ = WHITE * (0.3 + 0.7 * v)
+            if big and v > 0.5:
+                idx[r, c] = CI["+"]; col[r, c] = c_
+                for d in (1, 2):
+                    for rr, cc_, g in ((r, c - d, "-"), (r, c + d, "-"), (r - d, c, "|"), (r + d, c, "|")):
+                        if 0 <= rr < FROWS and 0 <= cc_ < FCOLS:
+                            idx[rr, cc_] = CI[g]; col[rr, cc_] = c_ * (0.6 / d)
+            else:
+                idx[r, c] = CI["." if v < 0.5 else "*"]; col[r, c] = c_
+        return idx, col
+
+    def typo_layer(self, t):
+        cols = np.arange(FCOLS)[None, :]
+        lci = (cols + np.floor(self.logo_v * t).astype(int)[:, None]) % FCOLS
+        idx = np.where(self.typo, np.take_along_axis(self.logo_idx, lci, 1), 0)
+        grad = np.clip((FGY - 280) / 1200, 0, 1)[..., None]
+        shimmer = (0.85 + 0.25 * np.sin(FGX * 0.015 + FGY * 0.008 - t * 3.5))[..., None]
+        col = (np.array([1.0, 0.36, 0.26]) * (1 - grad) + np.array([1.0, 0.62, 0.34]) * grad) * shimmer * 1.15
+        return idx, np.clip(col, 0, 1).astype(np.float32)
+
+    def space_frame(self, t, fi):
+        """inside the pupil: the moons, the rocket and its trail, the title; then all of it melts into the date"""
+        fade = float(sstep(self.t_space, self.t_space + 0.8, t))
+        bidx, bcol = self.space_bg(t, fi)
+        bcol = bcol * fade
+        b, col, sidx, scene = self.space_layers(t, fi)
+        sg = glyphs(np.clip(b, 0, 1), int(t * 12), (FROWS, FCOLS))
+        sg = np.where(sidx > 0, sidx, sg)
+        sc = np.clip(col * np.clip(0.35 + 0.8 * b, 0, 1)[..., None], 0, 1)
+        vis = b > 0.03
+        a = float(smoother(T_TYPO, T_TYPO + TYPO_MORPH, t))
+        if a <= 0:
+            return np.where(vis, sg, bidx), np.where(vis[..., None], sc, bcol)
+        tidx, tcol = self.typo_layer(t)
+        inside = (self.d_scene * (1 - a) + self.d_typo * a) < 0
+        from_scene = inside & vis & (self.frand >= a)
+        idx = np.where(inside, np.where(from_scene, sg, tidx), bidx)
+        base = np.where(vis[..., None], sc, RED * 0.6)
+        col = np.where(inside[..., None], base * (1 - a) + tcol * a, bcol)
+        if a < 1:   # what's outside the melting shape keeps shining, fading out
+            keep = ~inside & vis & (self.frand >= a)
+            idx = np.where(keep, sg, idx)
+            col = np.where(keep[..., None], sc * (1 - a), col)
         return idx, col.astype(np.float32)
 
     def gaze(self, t):
@@ -631,7 +715,7 @@ class Show:
         cx = self.star_xy[0] + (540 - self.star_xy[0]) * e
         cy = self.star_xy[1] + (960 - self.star_xy[1]) * e
         # once it's an eye it floats, slowly up and down, until the dive centres on the pupil
-        fw = float(sstep(T_PULL, T_PULL + 1.2, t)) * (1 - float(smoother(T_DIVE - 0.5, T_DIVE + 0.2, t)))
+        fw = float(sstep(T_PULL, T_PULL + 1.2, t)) * (1 - float(smoother(T_DIVE - 0.7, T_DIVE, t)))
         cy += 85 * math.sin(2 * math.pi * (t - T_PULL) / 3.8) * fw
         cx += 24 * math.sin(2 * math.pi * (t - T_PULL) / 5.3 + 0.7) * fw
         gx, gy = self.gaze(t)
@@ -695,14 +779,17 @@ class Show:
         b = np.where(in_iris, b_in, np.where(eye_on, b_eye, b_out))
         col = np.where(in_iris[..., None], c_in, np.where(eye_on[..., None], c_eye, c_out))
 
-        # pupil, with their star as the catch light
+        # pupil, with two small dots in it: the moons to come
         pupil = in_iris & (d < rp)
         b = np.where(pupil, 0.0, b)
-        hs = (0.4 + 0.15 * k) * Rr
-        hd = star_sdf(dx + 0.38 * Rr, dy - 0.36 * Rr, hs * 0.5, hs * 0.38)
-        hl = in_iris & (hd < 0) & (fm > 0.5) & (t < T_DIVE + 0.1)
-        b = np.where(hl, 1.0, b)
-        col = np.where(hl[..., None], WHITE, col)
+        hl = np.zeros_like(pupil)
+        if fm > 0.5:
+            pcx, pcy, rpx = cx + gx * EU * z, cy - gy * EU * z, rp * EU * z
+            nat = [(pcx + ox * rpx, pcy + oy * rpx, rr * rpx) for (ox, oy, rr) in DOTS]
+            mb, mc, hl = self.moon_fields(GX, GY, t, self.moon_state(t, nat), (ROWS, COLS))
+            show = hl | (mb > 0.03) & (pupil | (t >= T_DIVE))
+            b = np.where(show, mb, b)
+            col = np.where(show[..., None], mc, col)
 
         # the logo is stamped into the sun, then melts back into it
         lg = (self.logo_sun > 0.5) & (t >= self.T_stamp) & (t < self.T_melt) & (z < Z0 * 1.01)
@@ -751,14 +838,14 @@ class Show:
         return idx, col.astype(np.float32)
 
     def end_card(self, img, t):
-        if t < T_CARD:
+        if t < T_FOOT:
             return img
         im = Image.fromarray(img)
         dr = ImageDraw.Draw(im)
-        lines = [(">>> let's work together.", 46, (252, 236, 212), T_CARD, 26),
-                 (self.handle, 38, (255, 196, 120), T_CARD + 1.15, 26),
-                 ("stage visual concept for 2ND SUN - made 100% in code", 21, (190, 165, 140), T_CARD + 1.65, 70)]
-        y = 1490
+        lines = [(">>> let's work together.", 34, (252, 236, 212), T_FOOT, 26),
+                 (self.handle, 30, (255, 196, 120), T_FOOT + 1.0, 26),
+                 ("stage visual concept for 2ND SUN - made 100% in code", 19, (190, 165, 140), T_FOOT + 1.45, 70)]
+        y = 1600
         for (txt, size, rgb, t0, cps) in lines:
             if txt and t >= t0:
                 f = find_font(size)
@@ -773,25 +860,30 @@ class Show:
     def frame(self, t, fi):
         if t < DROP:
             img = render_fine(*self.pre_frame(t, fi))
-        elif t < T_END:
+        elif t < self.t_space:
             img = render(*self.drop_frame(t, fi))
-        elif t < T_OUTRO:
-            img = self.phone_text(render_fine(*self.phone_frame(t, fi)), t)
         else:
-            img = render_fine(*self.end_frame(t, fi))
-            if t < T_OUTRO + 0.4:
-                img = self.phone_text(img, t)
-            img = self.end_card(img, t)
+            img = self.end_card(render_fine(*self.space_frame(t, fi)), t)
         g = float(sstep(0.0, 0.25, t)) * (1 - float(sstep(DUR - 0.5, DUR, t)))
         return (img * g).astype(np.uint8) if g < 1 else img
 
 
-def export(path, music, start, handle):
+def export(path, music, start, handle, music2=None, start2=0.0):
     show = Show(handle)
     ff = ffmpeg_bin()
     cmd = [ff, "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W}x{H}",
            "-r", str(FPS), "-i", "-"]
-    if music:
+    xf = 0.3
+    if music and music2:
+        # first track until we're inside the pupil, then a short crossfade into the second
+        cmd += ["-ss", str(start), "-t", str(T_END + xf / 2), "-i", music,
+                "-ss", str(start2), "-t", str(DUR - T_END + xf / 2), "-i", music2,
+                "-filter_complex",
+                "[1:a]aformat=sample_rates=44100:channel_layouts=stereo,afade=t=in:d=0.05[a1];"
+                "[2:a]aformat=sample_rates=44100:channel_layouts=stereo[a2];"
+                f"[a1][a2]acrossfade=d={xf}[ax];[ax]afade=t=out:st={DUR - 1.2}:d=1.2[a]",
+                "-map", "0:v", "-map", "[a]", "-c:a", "aac", "-b:a", "192k"]
+    elif music:
         cmd += ["-ss", str(start), "-t", str(DUR), "-i", music,
                 "-af", f"afade=t=in:d=0.05,afade=t=out:st={DUR - 1.5}:d=1.5", "-c:a", "aac", "-b:a", "192k"]
     cmd += ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "17", "-preset", "medium", "-shortest", path]
@@ -809,6 +901,8 @@ if __name__ == "__main__":
     ap.add_argument("--export", default="second_sun.mp4")
     ap.add_argument("--music", default=None, help="audio file to cut the video to")
     ap.add_argument("--start", type=float, default=236.32, help="seconds into the track to start (drop lands 9.52s later)")
+    ap.add_argument("--music2", default=None, help="second track, from the moment we're inside the pupil")
+    ap.add_argument("--start2", type=float, default=19.0, help="seconds into the second track to start")
     ap.add_argument("--handle", default="@yourhandle")
     a = ap.parse_args()
-    export(a.export, a.music, a.start, a.handle)
+    export(a.export, a.music, a.start, a.handle, a.music2, a.start2)
