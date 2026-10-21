@@ -6,8 +6,8 @@ code fills the page -> the code forms the logo, and as it forms the star inside 
 starts to shine -> two hands drawn in code reach in and meet on the star -> on the
 drop it explodes into a sun with the logo stamped in it -> the sun becomes an iris,
 the camera pulls back: one big eye -> it looks around on the beat and stares at you ->
-dive into the pupil -> out of the black the code fills the page and forms the logo
-again -> let's work together.
+dive into the pupil -> inside, an old phone drops in spinning and types "you need me" ->
+it turns into code, the code forms the logo again -> let's work together.
 
 Export:   python second_sun.py --music track.mp3 --start 236.32 --handle @you --export second_sun.mp4
           (--start = where to cut the track; the drop lands 9.52s in, 5 bars at 126 BPM)
@@ -21,7 +21,7 @@ from code_to_monalisa import (W, H, CW, CH, COLS, ROWS, OY, CI, CHARS, BLOCK, PR
                               colorize)
 
 FPS = 30
-DUR = 25.0
+DUR = 28.6
 BPM = 126.05
 BEAT = 60 / BPM
 BAR = 4 * BEAT
@@ -31,8 +31,10 @@ T_HANDS_IN = 4.6                          # the hands start reaching for the sta
 T_IRIS = DROP + 1.6 * BAR                 # the sun turns into an iris
 T_PULL = DROP + 1.8 * BAR                 # camera pulls back: it's an eye
 T_DIVE = DROP + 4.5 * BAR                 # dive into the pupil
-T_END = DROP + 5 * BAR                    # 19.05s: out of the black, the code again
-T_CARD = T_END + 2.1                      # let's work together
+T_END = DROP + 5 * BAR                    # 19.05s: inside the pupil, an old phone drops in
+T_PHONE = T_END
+T_OUTRO = T_PHONE + 2 * BAR               # 22.86s: the phone turns back into code, the logo again
+T_CARD = T_OUTRO + 2.1                    # let's work together
 
 CREAM = np.array([0.99, 0.92, 0.82], np.float32)
 GOLD = np.array([1.0, 0.82, 0.45], np.float32)
@@ -178,6 +180,105 @@ def hand_sdf(X, Y, wx, wy, ang, s, fingers, thumb_ang, mirror):
     if mirror: ty = -ty
     return d * s, (wx + (tx * c - ty * sn) * s, wy + (tx * sn + ty * c) * s)
 
+# ------------------------------------------------------------------ the old phone, ray-traced into characters
+def rbox(px, py, pz, bx, by, bz, r):
+    qx, qy, qz = np.abs(px) - bx, np.abs(py) - by, np.abs(pz) - bz
+    out = np.sqrt(np.maximum(qx, 0) ** 2 + np.maximum(qy, 0) ** 2 + np.maximum(qz, 0) ** 2)
+    return out + np.minimum(np.maximum(qx, np.maximum(qy, qz)), 0) - r
+
+def phone_sdf(x, y, z):
+    d = rbox(x, y, z, 112, 310, 34, 18)                                   # body
+    d = smin(d, rbox(x, y + 300, z, 118, 42, 40, 22), 30)                 # flared mouthpiece
+    d = np.minimum(d, rbox(x - 72, y - 430, z, 6, 110, 6, 6))             # antenna
+    d = np.minimum(d, np.sqrt((x - 72) ** 2 + (y - 548) ** 2 + z ** 2) - 15)  # antenna tip
+    return d
+
+LCD = (-92, 92, 182, 290)                 # x0, x1, y0, y1 on the front face
+KEYS = [(kx, ky, lab) for ky, row in zip((105, 35, -35, -105, -175), ("123", "456", "789", "*0#", "<>!"))
+        for kx, lab in zip((-74, 0, 74), row)]
+
+
+class Phone:
+    """drops in from above the frame spinning, bounces, buzzes, types on its screen"""
+    def pose(self, u):
+        land = 0.95
+        if u < land:
+            y = -560 + (PHONE_Y + 560) * (u / land) ** 2                     # falling
+        else:
+            v = u - land
+            y = PHONE_Y - 90 * abs(math.sin(v * 7.5)) * math.exp(-v * 4.5)   # bounces
+        th = 4 * math.pi * float(smoother(0.0, 1.7, u))                     # spins, ends facing us
+        ph = 0.45 * math.sin(u * 5.0) * math.exp(-u * 1.6)
+        return y, th, ph
+
+    def fields(self, t):
+        u = t - T_PHONE
+        cy, th, ph = self.pose(u)
+        cx = 540.0 + 4 * kick(t) * math.sin(t * 90) * float(sstep(1.6, 1.8, u))   # buzz on the kick
+        b = np.zeros((FROWS, FCOLS)); col = np.zeros((FROWS, FCOLS, 3), np.float32)
+        lcd = np.zeros((FROWS, FCOLS), bool)
+        wx, wy = (FGX - cx) / PHONE_S, -(FGY - cy) / PHONE_S
+        m = (np.abs(wx) < 380) & (wy > -470) & (wy < 690)
+        rx, ry = wx[m], wy[m]
+        # world = tilt(ph) . spin(th) . phone; rays come from the viewer along -z
+        c1, s1, c2, s2 = math.cos(ph), math.sin(ph), math.cos(-th), math.sin(-th)
+        ox, oy = rx * c1 + ry * s1, -rx * s1 + ry * c1
+        o = np.stack([ox * c2 + 900 * s2, oy, -ox * s2 + 900 * c2], -1)
+        dvec = np.array([-s2, 0, -c2])
+        tt = np.zeros(len(rx)); hit = np.zeros(len(rx), bool)
+        for _ in range(48):
+            p = o + tt[:, None] * dvec
+            d = phone_sdf(p[:, 0], p[:, 1], p[:, 2])
+            hit |= d < 0.6
+            tt = np.where(hit, tt, tt + np.maximum(d, 0.5))
+            if (tt > 1800).all(): break
+        hit &= tt < 1800
+        if hit.any():
+            p = o[hit] + tt[hit][:, None] * dvec
+            e = 1.5
+            n = np.stack([phone_sdf(p[:, 0] + e, p[:, 1], p[:, 2]) - phone_sdf(p[:, 0] - e, p[:, 1], p[:, 2]),
+                          phone_sdf(p[:, 0], p[:, 1] + e, p[:, 2]) - phone_sdf(p[:, 0], p[:, 1] - e, p[:, 2]),
+                          phone_sdf(p[:, 0], p[:, 1], p[:, 2] + e) - phone_sdf(p[:, 0], p[:, 1], p[:, 2] - e)], -1)
+            n /= np.linalg.norm(n, axis=1, keepdims=True) + 1e-9
+            # light in phone space (fixed in the world, so rotate it with the phone)
+            L = np.array([-0.45, 0.55, 0.7]); L /= np.linalg.norm(L)
+            Lp = np.array([L[0] * c2 + L[2] * s2, L[1], -L[0] * s2 + L[2] * c2])
+            lam = np.clip(n @ Lp, 0, 1)
+            bb = 0.16 + 0.7 * lam
+            cc = np.tile(np.array([0.82, 0.8, 0.78], np.float32), (len(bb), 1))
+            front = (n[:, 2] > 0.75) & (p[:, 2] > 25)
+            x, y = p[:, 0], p[:, 1]
+            # earpiece slots
+            ear = front & (np.abs(x) < 55) & (y > 222 + 80) & (y < 262 + 80) & ((y.astype(int) // 7) % 2 == 0)
+            bb = np.where(ear, 0.05, bb)
+            # keypad
+            on_key = np.zeros(len(bb), bool)
+            for kx, ky, lab in KEYS:
+                k = front & (np.abs(x - kx) < 28) & (np.abs(y - ky) < 20)
+                on_key |= k
+            bb = np.where(on_key, np.clip(bb + 0.22, 0, 1), np.where(front & (y < 135) & (y > -205), bb * 0.6, bb))
+            cc = np.where(on_key[:, None], np.array([1.0, 0.93, 0.82]), cc)
+            # screen: dark until it wakes, then green
+            scr = front & (x > LCD[0]) & (x < LCD[1]) & (y > LCD[2]) & (y < LCD[3])
+            wake = float(sstep(1.75, 1.9, u)) * (0.85 + 0.15 * (math.sin(t * 40) > -0.6))
+            bb = np.where(scr, 0.05 + 0.33 * wake, bb)
+            cc = np.where(scr[:, None], np.array([0.45, 1.0, 0.55]), cc)
+            bi = np.zeros(m.sum()); bi[hit] = bb
+            ci = np.zeros((m.sum(), 3), np.float32); ci[hit] = cc
+            li = np.zeros(m.sum(), bool); li[hit] = scr
+            b[m], col[m], lcd[m] = bi, ci, li
+        # key labels: where each key's center lands on screen, while the front faces us
+        labels = []
+        if math.cos(th) > 0.8:
+            for kx, ky, lab in KEYS:
+                xs = kx * math.cos(th) + 36 * math.sin(th)
+                X, Y = xs * c1 - ky * s1, xs * s1 + ky * c1
+                labels.append((cx + X * PHONE_S, cy - Y * PHONE_S, lab))
+        return b, col, lcd, labels
+
+PHONE_Y = 930.0
+PHONE_S = 1.35                            # phone units -> px
+
 
 class Show:
     def __init__(self, handle, seed=3):
@@ -221,6 +322,8 @@ class Show:
         self.code_rows = [src[(7 * r) % len(src):] + src for r in range(FROWS)]
         self.rain_speed = rng.uniform(14, 30, FCOLS)
         self.rain_phase = rng.uniform(0, 40, FCOLS)
+        self.phone = Phone()
+        self.frand = rng.random((FROWS, FCOLS))
 
     def build_page(self, rng):
         """a page of code on the fine grid: what each cell says, its color, when it gets typed"""
@@ -399,12 +502,59 @@ class Show:
             idx, col = self.hands_over(idx, col, t, I)
         return idx, col
 
+    def phone_frame(self, t, fi):
+        """inside the pupil: dim code drifting in the dark, the phone falling through it"""
+        b, pc, lcd, labels = self.phone.fields(t)
+        rr = np.arange(FROWS)[:, None]
+        ph = (rr - t * self.rain_speed[None, :] * 0.6 - self.rain_phase[None, :] * 3) % 45
+        rain = (ph < 4) & (self.frand < 0.5)
+        idx = np.where(rain, self.page_idx, 0)
+        col = np.broadcast_to(np.array([0.45, 0.55, 0.75], np.float32), (FROWS, FCOLS, 3)) * \
+            (0.12 + 0.18 * (1 - ph / 4)).clip(0, 0.3)[..., None]
+        on = b > 0.02
+        idx = np.where(on, glyphs(np.clip(b, 0, 1), int(t * 12), (FROWS, FCOLS)), idx)
+        col = np.where(on[..., None], pc * np.clip(0.35 + 0.8 * b, 0, 1)[..., None], col)
+        idx = np.where(lcd & (b < 0.2), 0, idx)          # the screen stays dark under the text
+        for (x, y, lab) in labels:
+            r, c = int(round((y - FOY) / FCH - 0.5)), int(round(x / FCW - 0.5))
+            if 0 <= r < FROWS and 0 <= c < FCOLS and lab in CI:
+                idx[r, c] = CI[lab]; col[r, c] = (0.15, 0.12, 0.1)
+        return idx, col.astype(np.float32)
+
+    def phone_text(self, img, t):
+        """the message, typed on the green screen once the phone has landed"""
+        u = t - T_PHONE
+        if u < 1.9:
+            return img
+        y0, _, _ = self.phone.pose(u)
+        x0 = 540 + LCD[0] * PHONE_S
+        top = y0 - LCD[3] * PHONE_S
+        im = Image.fromarray(img); dr = ImageDraw.Draw(im)
+        green = (120, 255, 140)
+        dr.text((x0 + 14, top + 14), "1 NEW MESSAGE", font=find_font(19), fill=(90, 200, 110))
+        s, typing = typed("you need me", t, T_PHONE + 2.15, 7.5)
+        cur = "\u2588" if typing or (t * 2.5) % 2 < 1 else ""
+        dr.text((x0 + 14, top + 64), s + cur, font=find_font(34), fill=green)
+        return np.asarray(im)
+
     def end_frame(self, t, fi):
         """out of the black: the code fills the page again, twice as fast, and forms the logo"""
         k = kick(t) * (1 - float(sstep(DUR - 3, DUR - 1, t)))
-        tl = (t - T_END) * 2.6
-        I = (0.55 + 0.08 * math.sin(t * 2.2)) * float(sstep(T_END + 0.6, T_END + 1.6, t))
-        return self.code_logo(tl, I, 1.0 + 0.12 * k, k, 0.24, fi, rate=2.6)
+        tl = (t - T_OUTRO) * 2.6
+        I = (0.55 + 0.08 * math.sin(t * 2.2)) * float(sstep(T_OUTRO + 0.6, T_OUTRO + 1.6, t))
+        idx, col = self.code_logo(tl, I, 1.0 + 0.12 * k, k, 0.24, fi, rate=2.6)
+        # the phone breaks up into the code
+        if t < T_OUTRO + 0.7:
+            pidx, pcol = self.phone_frame(T_OUTRO - 0.01, fi)
+            Td = T_OUTRO + 0.55 * self.frand
+            keep = (t < Td - 0.1) & (pidx > 0)
+            dec = (t >= Td - 0.1) & (t < Td) & (pidx > 0)
+            idx = np.where(keep, pidx, idx)
+            col = np.where(keep[..., None], pcol, col)
+            rng = np.random.default_rng(fi + 5)
+            idx[dec] = rng.choice(PRINTABLE, int(dec.sum()))
+            col[dec] = (0.55, 1.0, 0.65)
+        return idx, col
 
     # ---------- 2. sun -> iris -> eye -> pupil
     def gaze(self, t):
@@ -566,6 +716,8 @@ class Show:
             img = render_fine(*self.pre_frame(t, fi))
         elif t < T_END:
             img = render(*self.drop_frame(t, fi))
+        elif t < T_OUTRO:
+            img = self.phone_text(render_fine(*self.phone_frame(t, fi)), t)
         else:
             img = self.end_card(render_fine(*self.end_frame(t, fi)), t)
         g = float(sstep(0.0, 0.25, t)) * (1 - float(sstep(DUR - 0.5, DUR, t)))
