@@ -865,8 +865,11 @@ class Show:
         y_low = -0.40 * sx_ ** 0.85 - 0.03 + 0.03 * X
         y_up = y_low + (0.6 * sx_ ** 0.7 + 0.02 - 0.04 * X - y_low) * op
         inside = (np.abs(X) < ex) & (Y < y_up) & (Y > y_low)
-        eye_on = t >= self.T_eye                       # per cell: has this cell become the eye yet
-        in_iris = (d < Rr) & (inside | ~eye_on)
+        # the eye grows outward from the iris (soft radial reveal) while the camera pulls back
+        rev = Rr + 2.8 * float(smoother(T_IRIS + 0.1, T_PULL + 1.2, t))
+        w = np.clip((rev - d) / 0.4, 0, 1) * float(sstep(T_IRIS, T_IRIS + 0.3, t))
+        eye_on = w > 0.5
+        in_iris = (d < Rr) & (inside | (w < 0.5))
 
         # --- iris: sun surface turning into fibers
         fm = float(smoother(T_IRIS - 0.6, T_IRIS + 0.4, t))
@@ -877,6 +880,9 @@ class Show:
         fibers = 0.5 + 0.5 * np.sin(ang * 70 + fib_n * 10)
         b_iris = np.clip(0.58 + 0.3 * fib_n + 0.3 * fibers, 0, 1) * (1 - 0.75 * sstep(0.85 * Rr, Rr, d))
         b_in = b_sun * (1 - fm) + b_iris * fm
+        # eclipse: a diamond-ring flash around the pupil as it opens
+        dia = float(sstep(T_IRIS - 0.35, T_IRIS, t)) * (1 - float(sstep(T_IRIS + 0.15, T_IRIS + 0.8, t)))
+        b_in = b_in + 0.9 * dia * np.exp(-((d - rp) / (0.025 + 0.02 * dia)) ** 2)
         zone = np.clip((d - rp) / (Rr - rp + 1e-6), 0, 1)[..., None]
         c_in = GOLD * (1 - zone) + np.array([1.0, 0.55, 0.16]) * zone
         c_in = c_in + WHITE * (1 - zone) * (1 - fm) * 0.3
@@ -901,8 +907,9 @@ class Show:
         c_eye = np.where(inside[..., None], np.array([1.0, 0.9, 0.8]), np.array([1.0, 0.62, 0.36]))
         b_eye = b_eye + 0.25 * k * np.exp(-np.maximum(d - Rr, 0) / 0.15) * inside   # iris glow on the kick
 
-        b = np.where(in_iris, b_in, np.where(eye_on, b_eye, b_out))
-        col = np.where(in_iris[..., None], c_in, np.where(eye_on[..., None], c_eye, c_out))
+        wv = w[..., None]
+        b = np.where(in_iris, b_in, b_out * (1 - w) + b_eye * w)
+        col = np.where(in_iris[..., None], c_in, c_out * (1 - wv) + c_eye * wv)
 
         # pupil, with two small dots in it: the moons to come
         pupil = in_iris & (d < rp)
@@ -917,9 +924,10 @@ class Show:
             col = np.where(show[..., None], mc, col)
 
         # the logo is stamped into the sun, then melts back into it
-        lg = (self.logo_sun > 0.5) & (t >= self.T_stamp) & (t < self.T_melt) & (z < Z0 * 1.01)
-        b = np.where(lg & in_iris, 0.0, np.where(lg, np.maximum(b, 0.75), b))
-        col = np.where((lg & ~in_iris)[..., None], CREAM, col)
+        lg = (self.logo_sun > 0.5) & (t >= self.T_stamp) & (z < Z0 * 1.01)
+        lw = 1 - sstep(self.T_melt - 0.45, self.T_melt, t)          # sinks softly into the sun
+        b = np.where(lg & in_iris, b * (1 - lw), np.where(lg, np.maximum(b, 0.75 * lw), b))
+        col = np.where((lg & ~in_iris)[..., None], CREAM * lw[..., None] + col * (1 - lw[..., None]), col)
 
         flash = math.exp(-u / 0.18)
         b = b + (1 - b) * flash
@@ -931,10 +939,7 @@ class Show:
         idx = np.where(spoke, stroke_glyph(-ang), idx)
         # code transformations: stamp, melt, sun -> eye
         sw = lambda T: (t >= T - 0.12) & (t < T)
-        self.scramble(idx, col, (self.logo_sun > 0.5) & (sw(self.T_stamp) | sw(self.T_melt)), fi)
-        self.scramble(idx, col, sw(self.T_eye) & ~in_iris, fi + 1)
-        fresh = eye_on & (t < self.T_eye + 0.3) & ~in_iris
-        col[fresh] = col[fresh] * 0.5 + np.array([0.75, 0.95, 1.0]) * 0.5
+        self.scramble(idx, col, (self.logo_sun > 0.5) & sw(self.T_stamp), fi)
 
         # eyelashes, once the eye is there
         if t > T_IRIS + 0.3:
