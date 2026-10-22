@@ -3,7 +3,7 @@ The Curse of Being Human  |  9:16, red and black, every frame is text, cut to a 
 One continuous camera, no cuts: each scene turns into the next.
 
 the curse of being human: red code types across the screen and the code is ultron (from a reference),
-written in the scrolling code itself, his eyes glowing; he leans in toward us, swaying, his head turning and
+written in the scrolling code itself, his eyes glowing (he blinks once); he leans in toward us, swaying, his head turning and
 nodding -> yet manufacture chaos: his eyes flare and catch fire, and the pixel flames (from a reference) spread
 out over him from there, the heat running ahead of a ragged burning edge ->
 they fear death: it burns through his face to the x-ray skull underneath (from a reference), where his head was,
@@ -33,7 +33,6 @@ FPS = 30
 DUR = 30.55
 HITS = [3.0, 14.0, 17.0, 26.5]            # the heaviest hits in the track
 LYRICS = [
-    (0.0, 2.5, "The curse of being human"),
     (2.7, 5.03, "Humans pursue peace,"),
     (5.03, 7.43, "yet manufacture chaos."),
     (7.43, 9.23, "They fear death,"),
@@ -522,7 +521,15 @@ class Film:
             # his eyes burn brighter and brighter, then flare: the fire starts there
             flare = float(smoother(4.55, 5.0, t)) * math.exp(-max(t - 5.0, 0.0) / 0.35)
             de = np.minimum.reduce([np.hypot(PX - ex, PY - ey) for ex, ey in ULT_EYES])
-            core = np.exp(-de / (6.0 + 2.0 * flare)) * (1.1 + 0.2 * math.sin(t * 2.2) + 0.8 * flare)
+            # he blinks, once: a lid comes down over the light and lifts again
+            bl = math.exp(-((t - 3.7) / 0.07) ** 2)
+            if bl > 0.01:
+                lid = np.zeros(PX.shape, bool)
+                for ex, ey in ULT_EYES:
+                    lid |= (np.hypot((PX - ex) / 1.4, PY - ey) < 10) & (PY < ey - 10 + 20 * bl)
+                ub = np.where(lid, 0.05, ub); white = white & ~lid
+                ucol = np.where(lid[..., None], INK, ucol)
+            core = np.exp(-de / (6.0 + 2.0 * flare)) * (1.1 + 0.2 * math.sin(t * 2.2) + 0.8 * flare) * (1 - bl)
             halo = flare * np.exp(-de / 9.0)
             streak = flare * np.maximum.reduce([np.exp(-np.abs(PY - ey) / 2.0 - np.abs(PX - ex) / (20 + 40 * flare))
                                                 for ex, ey in ULT_EYES])          # a flare of light across each eye
@@ -1037,13 +1044,12 @@ class Film:
         items = items + [(29.6, DUR + 1, ">>> " + self.handle)] if self.handle else items
         for k, (t0, t1, txt) in enumerate(items):
             if not (t0 <= t < t1 + 0.15): continue
-            title = k == 0 and self.lyrics
-            f = mono(56 if title else 38)
-            s, typing = typed(txt, t, t0, 16 if title else 26)
+            f = mono(38)
+            s, typing = typed(txt, t, t0, 26)
             fade = 1 - float(sstep(t1, t1 + 0.15, t))
             shown = s + ("█" if typing or (txt.startswith(">>>") and (t * 2.4) % 2 < 1) else "")
             w = f.getlength(txt)
-            y = 1300 if title else 1390                                       # clear of the app's caption and buttons
+            y = 1180                                                         # well clear of the app's caption and buttons
             c = (255, 205, 195) if not txt.startswith(">>>") else (255, 95, 75)
             dr.text(((W - w) / 2, y), shown, font=f, fill=tuple(int(v * fade) for v in c),
                     stroke_width=4, stroke_fill=(0, 0, 0))
