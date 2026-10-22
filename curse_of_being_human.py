@@ -3,7 +3,7 @@ The Curse of Being Human  |  9:16, red and black, every frame is text, cut to a 
 One continuous camera, no cuts: each scene turns into the next.
 
 the curse of being human: a red rim light traces a classical bust (from a reference photo) ->
-humans pursue peace: dots fill it in, the camera holds still ->
+humans pursue peace: dots fill it in; the camera holds still, the head moves slowly like a person ->
 yet manufacture chaos: pixel flames (from a reference) climb over it ->
 they fear death: it burns away to sparks and ash, one ember left where the head was ->
 yet waste their lives: a thread unspools from it, the camera follows it down to money on a string (from a reference) ->
@@ -171,6 +171,7 @@ def lids(xl, op):
 # the bust photo, on a locked camera: screen px per photo px, the screen y of the point between its eyes
 BUST_K, BUST_Y = 2.0, 700.0
 BUST_E = (255.0, 290.0)
+NECK, HEAD_C = (255.0, 520.0), (255.0, 250.0)    # the head turns about the neck; the skull's centre
 EMBER_Y = 700.0                                  # the head's last ember, where the thread falls from
 TAPE_L = [(9.2, 0), (9.45, 400), (9.7, 1200), (9.95, 2080), (10.15, 2260), (10.4, 2140), (10.7, 2190), (11.2, 2175), (12.6, 2175)]
 FIRE_K = 2.0                                     # fire pattern, screen px per image px
@@ -194,15 +195,15 @@ def sample(img, PX, PY):
 
 # ------------------------------------------------------------------ scene B camera (eye units)
 EU = 330.0
-LOGZ = [(12.6, math.log(3.5)), (13.4, math.log(3.4)), (14.4, math.log(3.15)), (15.6, math.log(1.75)),
+LOGZ = [(12.6, math.log(3.5)), (13.4, math.log(3.75)), (14.3, math.log(3.95)), (15.4, math.log(1.9)),
         (16.7, math.log(1.0)), (17.6, math.log(0.5)), (18.8, math.log(0.36)), (20.0, math.log(0.33)),
         (21.5, math.log(0.31)), (22.5, math.log(0.38)), (23.6, math.log(0.98)), (24.6, math.log(1.06)),
         (25.3, math.log(1.1)), (26.5, math.log(1.25)), (27.8, math.log(1.2)), (30.55, math.log(1.2))]
-CX = [(12.6, 0.3), (14.4, 0.31), (16.0, 0.12), (17.6, 0.0), (19.0, 0.8), (20.5, 0.3), (21.8, -0.6),
+CX = [(12.6, 0.3), (14.4, 0.4), (16.0, 0.14), (17.6, 0.0), (19.0, 0.8), (20.5, 0.3), (21.8, -0.6),
       (22.6, -0.2), (23.6, 0.3), (25.0, 0.32)]
-CY = [(12.6, 0.05), (14.4, 0.05), (16.0, 0.04), (17.6, 0.2), (19.0, 0.9), (20.5, -0.4), (21.8, -0.9),
+CY = [(12.6, 0.05), (13.5, 0.0), (14.4, 0.09), (16.0, 0.04), (17.6, 0.2), (19.0, 0.9), (20.5, -0.4), (21.8, -0.9),
       (22.6, -0.75), (23.6, -0.95), (25.0, -0.85)]
-ROLLB = [(12.6, 0), (14.6, 0.0), (16.0, 0.04), (17.6, 0.1), (19.5, -0.06), (21.0, 0.08), (22.6, 0.02),
+ROLLB = [(12.6, 0), (13.6, 0.025), (14.6, -0.02), (16.0, 0.04), (17.6, 0.1), (19.5, -0.06), (21.0, 0.08), (22.6, 0.02),
          (23.6, 0.0), (30.55, 0.0)]
 # the eye with bars (reference photo): photo px per eye unit, the photo px at the eye's centre
 PRI_U, PRI_E = 400.0, (690.0, 774.0)
@@ -310,6 +311,10 @@ class Film:
         self.string_y0 = cy0 - (self.snap_hang[1] - 960) / (EU * Z0)
         self.string_k = 1.0 / (EU * Z0)
         self.impacts = [(T_SNAP, 6.0), (T_REVEAL + 0.05, 5.0)]
+        rng = np.random.default_rng(23)
+        n = 140
+        self.dust = dict(x=rng.uniform(-0.3, 0.95, n), y=rng.uniform(-0.6, 0.6, n), vx=rng.normal(0.01, 0.02, n),
+                         vy=rng.uniform(-0.05, 0.02, n), ph=rng.uniform(0, 6.3, n))
 
     def setup_tape(self):
         # the thread hangs straight; once the camera has panned, the money hangs in the middle of the frame
@@ -436,6 +441,19 @@ class Film:
         if t < 8.9:
             PX = BUST_E[0] + dx / BUST_K
             PY = BUST_E[1] + dy / BUST_K
+            # the head moves like a person's, slowly: it tilts on the neck, turns a little and nods,
+            # the shoulders stay put and only breathe
+            hw = np.clip((600 - PY) / 170, 0, 1) ** 1.5
+            tilt = hm * (0.035 * math.sin(t * 0.95 + 1.0) + 0.012 * math.sin(t * 2.1))
+            yaw = hm * (0.06 * math.sin(t * 0.8 + 0.3) + 0.02 * math.sin(t * 1.7 + 2))
+            nod = hm * 0.03 * math.sin(t * 1.05 + 2.2)
+            ang = -tilt * hw
+            qx, qy = PX - NECK[0], PY - NECK[1]
+            PX = NECK[0] + qx * np.cos(ang) - qy * np.sin(ang)
+            PY = NECK[1] + qx * np.sin(ang) + qy * np.cos(ang)
+            z = np.sqrt(np.clip(1 - ((PX - HEAD_C[0]) / 215) ** 2 - ((PY - HEAD_C[1]) / 260) ** 2, 0, 1))
+            PX = PX - yaw * 215 * z * hw
+            PY = PY - nod * 260 * z * hw - 2.5 * math.sin(t * 1.3) * (1 - hw)
             rim = self.bust_sample(self.bust_rim, PX, PY)
             inner = self.bust_sample(self.bust_in, PX, PY)
             glow = self.bust_sample(self.bust_glow, PX, PY)
@@ -562,6 +580,19 @@ class Film:
         """the eye with bars (reference photo), sampled at eye units; the hands rattle the bars on the hit"""
         PXp = PRI_E[0] + X * PRI_U
         PYp = PRI_E[1] - Y * PRI_U
+        # the hands never let go: they keep working their grip, sliding a little on the bars
+        for (hx, hy), ph in (((636.0, 775.0), 0.0), ((980.0, 792.0), 1.7)):
+            bump = np.exp(-(((PXp - hx) / 75) ** 2 + ((PYp - hy) / 95) ** 2))
+            gx_ = 2.5 * math.sin(t * 2.3 + ph) + 1.5 * math.sin(t * 5.1 + ph)
+            gy_ = 4.0 * math.sin(t * 1.6 + ph * 0.7) + 2.0 * math.sin(t * 3.7 + ph)
+            PXp = PXp - gx_ * bump; PYp = PYp - gy_ * bump
+        # the eye blinks once it's revealed: the upper lid's skin slides down over it
+        bl = math.exp(-((t - 15.75) / 0.09) ** 2)
+        if bl > 0.01:
+            _, y_low, y_up = lids(X, 1.0)
+            y_cl = y_up - (y_up - y_low) * bl
+            cov = (np.abs(X) < EX) & (Y < y_up + 0.05) & (Y > y_cl)
+            PYp = np.where(cov, PYp - (y_up + 0.05 - y_cl) * PRI_U, PYp)
         a = t - 14.0
         if 0 <= a < 0.9:
             cell = (np.abs(X - 0.3) < 0.62) & (Y > -0.5) & (Y < 0.6)
@@ -580,6 +611,11 @@ class Film:
         vig = 1 - float(smoother(14.4, 15.8, t))
         e = ((X - 0.29) / 0.82) ** 2 + ((Y - 0.04) / 0.62) ** 2
         b = b * (1 - vig * sstep(0.75, 1.15, e))
+        # a bare bulb swings above the cell: its light slides back and forth over the bars and hands
+        lx = PRI_BAR + 0.34 * math.sin(t * 2.4)
+        lamp = 0.55 + 0.75 * np.exp(-(((X - lx) / 0.42) ** 2 + ((Y - 0.6) / 1.0) ** 2))
+        cw = 1 - float(smoother(14.6, 15.6, t))
+        b = np.clip(b * (1 + (lamp - 1) * cw), 0, 1)
         # reveal: outward from the bar the string turned into
         rv = T_REVEAL + 0.1 + 0.8 * np.clip(np.hypot((X - PRI_BAR) / 0.7, Y / 1.1), 0, 1.3) ** 0.85 + 0.08 * self.rand
         bar = (np.abs(X - PRI_BAR) < 0.03) & (Y > -0.45) & (Y < 0.55)
@@ -602,6 +638,20 @@ class Film:
             st = (np.abs(X - PRI_BAR - sw * (1 - k)) < hw) & (Y > ye) & ~on
             b = np.where(st, 0.9 - 0.3 * k, b); col = np.where(st[..., None], HOT, col)
             gl = np.where(st & (k < 0.5), CI["|"], gl)
+        # dust drifting through the light
+        if cw > 0 and t > T_REVEAL:
+            d = self.dust
+            age = t - T_REVEAL
+            px_ = (d["x"] + d["vx"] * age + 0.01 * np.sin(age * 1.7 + d["ph"]) - (-0.3)) % 1.25 + (-0.3)
+            py_ = (d["y"] + d["vy"] * age + 0.6) % 1.2 - 0.6
+            SXd, SYd = self.from_eye(px_, py_, self.cam_b(t))
+            r = ((SYd - FOY) / FCH).astype(int); c = (SXd / FCW).astype(int)
+            ok = (r >= 0) & (r < FROWS) & (c >= 0) & (c < FCOLS)
+            r, c = r[ok], c[ok]
+            lv = (0.35 + 0.35 * np.sin(t * 3 + d["ph"][ok])) * cw
+            lit = (t >= rv[r, c]) & (lv > 0.08)
+            r, c, lv = r[lit], c[lit], lv[lit]
+            b[r, c] = np.maximum(b[r, c], lv); col[r, c] = PALE * 0.8; gl[r, c] = CI["."]
         solid = (b > 0.03) | dec
         return b, col, gl, solid
 
