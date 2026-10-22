@@ -39,13 +39,13 @@ python second_sun.py --music chihiro.mp3 --export second_sun.mp4
 ```
 
 ## 4. The Curse of Being Human (9:16, red and black, cut to a spoken-word track)
-One continuous camera, no cuts, every scene turns into the next: a red rim light traces a classical
-bust, flames climb over it and burn through to an x-ray skull with a cassette for a brain; the tape
-unspools down to money on a string; the camera pushes into the money and it's cut into strips that
-become prison bars, hands grab them; the prison is inside an eye, the eye is one of a wall of eyes
-that turn to look at you, then close; one opens into a red square and cries a line that kicks into
-two heartbeats and runs flat. The bust, fire, x-ray, money and red-square eye come from reference
-images in `assets/`, drawn in code. The lyrics type out as subtitles.
+One continuous camera, no cuts, every scene turns into the next: a red rim-lit classical bust turns
+its head, flames climb over it and burn through to an x-ray skull with a cassette for a brain; the
+tape unspools down to money on a string; the string snaps and the money drops; iron bars slam down,
+hands grab them; the prison is inside an eye, the eye is one of a wall of eyes that turn to look at
+you, then close; the bust returns and cries a line that kicks into two heartbeats and runs flat.
+The bust, fire, x-ray and money come from reference images in `assets/`, drawn in code. The lyrics
+type out as subtitles.
 ```
 python curse_of_being_human.py --music voice.mp4 --export curse.mp4
 python curse_of_being_human.py --music voice.mp4 --no-lyrics      # visuals only
