@@ -6,12 +6,13 @@ the curse of being human: a red rim light traces a classical bust (from a refere
 humans pursue peace: dots fill it in, the camera moves in on the head ->
 yet manufacture chaos: pixel flames (from a reference) climb over it ->
 they fear death: the fire burns away to an x-ray skull with a cassette for a brain (from a reference) ->
-yet waste their lives: the tape unspools, the camera follows it down to a stack of money on a string ->
-they demand freedom: the money drops, the string stays, more strings fall and harden into bars,
-hands grab them -> own prisons: pull back, the prison is inside an eye ->
-perhaps the greatest flaw in your design: the eye is one of a wall of eyes ->
-is not your mortality: they all close -> it is your extraordinary ability: one opens in a red square ->
-to remain alive / without ever truly living: it cries a line that becomes a heartbeat, then goes flat.
+yet waste their lives: the tape unspools, the camera follows it down to money on a string (from a reference) ->
+they demand freedom: the camera pushes into the money, it's cut into strips that narrow into iron bars ->
+then construct their: hands grab them -> own prisons: pull back, the prison is inside an eye ->
+perhaps the greatest flaw in your design: the eye is one of a wall of eyes, all turning to look at you ->
+is not your mortality: they all close -> it is your extraordinary ability: one opens into the red square (from a reference) ->
+to remain alive / without ever truly living: it cries a white line that kicks into two heartbeats, runs flat,
+the camera pulls back to the whole picture and the eye closes.
 
 Export:   python curse_of_being_human.py --music voice.mp4 --export curse.mp4
 """
@@ -19,7 +20,7 @@ import argparse, math, os, subprocess
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-from code_to_monalisa import W, H, CI, RAMP, PRINTABLE, sstep, smoother, fbm, find_font, ffmpeg_bin
+from code_to_monalisa import W, H, CI, RAMP, BLOCK, PRINTABLE, sstep, smoother, fbm, find_font, ffmpeg_bin
 from second_sun import (FCW, FCH, FCOLS, FROWS, FOY, FGX, FGY, FATLAS, SOFT, render_fine, glyphs,
                         stroke_glyph, smin, typed)
 
@@ -49,6 +50,7 @@ RED = np.array([1.0, 0.13, 0.08], np.float32)
 HOT = np.array([1.0, 0.60, 0.52], np.float32)
 PALE = np.array([1.0, 0.86, 0.82], np.float32)
 DOTS = np.array(sorted([CI[c] for c in ".:oO0@"], key=lambda i: FATLAS[i].mean()))
+SHADE = np.array(sorted([CI[c] for c in ".:-=+*#%@"], key=lambda i: FATLAS[i].mean()))   # smooth shading, no letters
 
 POOL = [
     "def human(): return curse", "while alive: pursue(peace)", "chaos = manufacture(peace)",
@@ -143,11 +145,11 @@ def _rbox2(x, y, hx, hy, r):
     qx, qy = np.abs(x) - hx + r, np.abs(y) - hy + r
     return np.hypot(np.maximum(qx, 0), np.maximum(qy, 0)) + np.minimum(np.maximum(qx, qy), 0) - r
 
-def splat(idx, col, solid, X, Y, color, b=None, bright=0.9):
-    """draw a polyline (screen px) into the fine grid as strokes"""
+def splat(idx, col, solid, X, Y, color, b=None, bright=0.9, glyph=None):
+    """draw a polyline (screen px) into the fine grid as strokes (or one glyph)"""
     if len(X) < 2: return
     c = np.round(X / FCW - 0.5).astype(int); r = np.round((Y - FOY) / FCH - 0.5).astype(int)
-    g = stroke_glyph(np.arctan2(np.gradient(Y) / FCH, np.gradient(X) / FCW))
+    g = stroke_glyph(np.arctan2(np.gradient(Y) / FCH, np.gradient(X) / FCW)) if glyph is None else np.full(len(X), glyph)
     ok = (c >= 0) & (c < FCOLS) & (r >= 0) & (r < FROWS)
     idx[r[ok], c[ok]] = g[ok]
     col[r[ok], c[ok]] = color[ok] if np.ndim(color) == 2 else color
@@ -198,45 +200,42 @@ REELS = [((243.0, 120.0), 40.0), ((368.0, 146.0), 62.0)]
 TAPE0 = (250.0, 415.0)
 TAPE_L = [(9.2, 0), (9.45, 400), (9.7, 1200), (9.95, 2080), (10.15, 2260), (10.4, 2140), (10.7, 2190), (11.2, 2175), (12.6, 2175)]
 FIRE_K = 2.0                                     # fire pattern, screen px per image px
-T_CUT = 11.95                                    # the money drops
-MB = (112.0, 210.0, 34.0)                        # money stack half size, px
+# the money photo: the string's top, the point that ends up at the centre of the screen, scale and tilt
+MONEY_KNOT, MONEY_C = (159.0, 0.0), (200.0, 290.0)
+K_M0, K_M1, PHI_M1 = 1.9, 7.5, 0.1
+T_PUSH = 11.83                                   # "They demand freedom": the camera pushes into the money
 
-def bill_texture():
-    """a (made-up) banknote, drawn sideways and turned upright: brightness 0..1 per px"""
-    w, h = int(2 * MB[1]), int(2 * MB[0])
-    im = Image.new("L", (w, h), 120); d = ImageDraw.Draw(im)
-    d.rectangle([4, 4, w - 5, h - 5], outline=230, width=10)
-    for x in range(14, w - 14, 7):
-        d.line([(x, 14), (x + 6, 20)], fill=175)
-        d.line([(x, h - 20), (x + 6, h - 14)], fill=175)
-    d.rectangle([22, 22, w - 23, h - 23], outline=200, width=2)
-    cx, cy = w // 2, h // 2
-    d.ellipse([cx - 62, cy - 78, cx + 62, cy + 78], fill=95, outline=235, width=6)
-    d.ellipse([cx - 30, cy - 52, cx + 30, cy + 18], fill=170)                 # a portrait: head
-    d.pieslice([cx - 52, cy + 4, cx + 52, cy + 110], 180, 360, fill=150)      # shoulders
-    f = mono(54)
-    for (x, y) in ((30, 26), (w - 140, 26), (30, h - 82), (w - 140, h - 82)):
-        d.text((x, y), "100", font=f, fill=240)
-    f2 = mono(18)
-    d.text((cx, 34), "IN CODE WE TRUST", font=f2, fill=220, anchor="mm")
-    d.text((cx, h - 34), "ONE HUNDRED", font=f2, fill=220, anchor="mm")
-    return np.asarray(im.rotate(90, expand=True), np.float32) / 255.0
+def sample(img, PX, PY):
+    """bilinear sample of an (h, w) or (h, w, c) image at float px; zero outside"""
+    h, w = img.shape[:2]
+    ok = (PX >= 0) & (PX < w - 1) & (PY >= 0) & (PY < h - 1)
+    x0 = np.clip(PX, 0, w - 1.001); y0 = np.clip(PY, 0, h - 1.001)
+    i, j = x0.astype(int), y0.astype(int)
+    fx, fy = x0 - i, y0 - j
+    if img.ndim == 3:
+        fx, fy, ok = fx[..., None], fy[..., None], ok[..., None]
+    v = (img[j, i] * (1 - fx) * (1 - fy) + img[j, i + 1] * fx * (1 - fy) +
+         img[j + 1, i] * (1 - fx) * fy + img[j + 1, i + 1] * fx * fy)
+    return np.where(ok, v, 0.0)
 
 # ------------------------------------------------------------------ scene B camera (eye units)
 EU = 330.0
-LOGZ = [(12.6, math.log(6.5)), (14.6, math.log(5.9)), (15.6, math.log(2.6)), (16.7, math.log(1.0)),
-        (17.6, math.log(0.5)), (18.8, math.log(0.36)), (20.0, math.log(0.33)), (21.5, math.log(0.31)),
-        (22.5, math.log(0.38)), (23.6, math.log(0.98)), (24.6, math.log(1.06)), (25.6, math.log(1.0)),
-        (26.8, math.log(0.72)), (30.55, math.log(0.66))]
-CX = [(12.6, 0), (13.6, 0.13), (14.6, 0.14), (16.0, 0.05), (17.6, 0.0), (19.0, 0.8), (20.5, 0.3),
-      (21.8, -0.6), (22.6, -0.3), (23.6, 0.0), (25.6, 0.0)]
+LOGZ = [(12.6, math.log(6.5)), (13.3, math.log(6.4)), (14.6, math.log(5.6)), (15.6, math.log(2.6)),
+        (16.7, math.log(1.0)), (17.6, math.log(0.5)), (18.8, math.log(0.36)), (20.0, math.log(0.33)),
+        (21.5, math.log(0.31)), (22.5, math.log(0.38)), (23.6, math.log(0.98)), (24.6, math.log(1.06)),
+        (25.3, math.log(1.1)), (26.5, math.log(1.25)), (27.8, math.log(1.2)), (30.55, math.log(1.2))]
+CX = [(12.6, 0.08), (14.6, 0.08), (16.0, 0.05), (17.6, 0.0), (19.0, 0.8), (20.5, 0.3), (21.8, -0.6),
+      (22.6, -0.3), (23.6, 0.0), (25.0, 0.1)]
 CY = [(12.6, 0.08), (14.6, 0.06), (16.0, 0.0), (17.6, 0.2), (19.0, 0.9), (20.5, -0.4), (21.8, -0.9),
-      (22.6, -0.6), (23.6, -0.85), (25.0, -0.9), (25.6, -0.8)]
+      (22.6, -0.6), (23.6, -0.75), (25.0, -0.7)]
 ROLLB = [(12.6, 0), (14.6, 0.0), (16.0, 0.04), (17.6, 0.1), (19.5, -0.06), (21.0, 0.08), (22.6, 0.02),
-         (23.6, 0.0), (25.6, 0.0), (26.9, -math.pi / 2), (30.55, -math.pi / 2 - 0.05)]
-BAR_DX, BAR_R = 0.26, 0.016
-SQ = (1.35, -3.2, 0.95)                          # the red square: half width, bottom, top (eye units)
+         (23.6, 0.0), (30.55, 0.0)]
+BAR_DX, BAR_R = 0.16, 0.016
+# the red-square eye (reference image): px per eye unit, the eye's centre, its own lids
+REF_U, REF_E = 230.0, (490.0, 760.0)
+REF_AP = (1.25, -0.33, 0.52)                     # half width, lower lid, upper lid (eye units)
 T_TEAR, TEAR_A, TEAR_V = 25.0, 7.0, 2.6
+TEAR0, TEAR_SLANT = (0.152, -0.283), -0.0275     # where the tear leaves the lower lid; x drift per unit down
 BEATS = [(26.5, 0.8), (27.45, 0.48)]             # (R-spike time, amplitude)
 
 
@@ -245,22 +244,24 @@ class Film:
         rng = np.random.default_rng(seed)
         self.handle, self.lyrics = handle, lyrics
         self.rand = rng.random((FROWS, FCOLS))
-        self.bill = bill_texture()
         self.setup_bust()
         here = os.path.dirname(os.path.abspath(__file__))
         self.skull = np.asarray(Image.open(os.path.join(here, "assets", "skull_xray.png")).convert("L"), np.float32) / 255.0
         self.fire = np.asarray(Image.open(os.path.join(here, "assets", "fire.png")).convert("RGB"), np.float32) / 255.0
+        self.money = np.asarray(Image.open(os.path.join(here, "assets", "money.png")).convert("RGBA"), np.float32) / 255.0
+        self.ref_eye = np.asarray(Image.open(os.path.join(here, "assets", "red_square_eye.png")).convert("RGB")
+                                  .filter(ImageFilter.GaussianBlur(1.2)), np.float32) / 255.0
         self.build_code(rng)
         # the fire eats the face from the bottom up
         self.T_burn = 7.25 + 1.2 * np.clip((1750 - FGY) / 1500, 0, 1) + 0.35 * (fbm(FGX / 150, FGY / 150, 3, 19) - 0.5)
         self.setup_tape()
         self.setup_wall(rng)
-        self.tear_beats = [(tb - 0.3 / TEAR_V, A) for tb, A in BEATS]
-        # at the handoff the only thing on screen is the string: start the bars scene from its end
-        _, hang = self.tape(T_B)
-        ky = hang[1] - 30 * (1 - math.exp(-(T_B - T_CUT) / 0.08))
-        cam = self.cam_b(T_B)
-        self.knot_y = cam[1] + (960 - ky) / (EU * cam[2])
+        self.tear_beats = [(tb - 1.2 / TEAR_V, A) for tb, A in BEATS]
+        # the closing shot: the eye, the square and the whole line under it
+        tip = TEAR0[1] - self.tear_s(29.2)
+        top, bot = 1.55, tip - 0.3
+        self.end_cx, self.end_cy, self.end_z = 0.1, (top + bot) / 2, 1920 / (EU * (top - bot) * 1.06)
+        self.cam_t_b = self.cam_b(T_B)[:3]
 
     # ---------- the page of code behind everything
     def build_code(self, rng):
@@ -319,13 +320,14 @@ class Film:
         return np.where(ok, v, 0.0)
 
     def setup_tape(self):
-        # the tape hangs straight at screen x = 540 once the camera has panned; the money ends up centred
+        # the tape hangs straight; once the camera has panned, the money hangs in the middle of the frame
         k = ckey(11.5, SKULL_K)
-        hxf = 540 - (TAPE0[0] - SKULL_E[0]) * k
+        off = (MONEY_C[0] - MONEY_KNOT[0], MONEY_C[1] - MONEY_KNOT[1])
+        hxf = 540 - off[0] * K_M0 - (TAPE0[0] - SKULL_E[0]) * k
         self.HXS = [(6.8, 540), (8.6, 545), (10.6, hxf), (12.6, hxf)]
         self.PAN = [(0, 0)]
         y0 = ckey(11.5, SKULL_HY) + (TAPE0[1] - SKULL_E[1]) * k
-        P = 960 - (y0 + TAPE_L[-1][1] + 20 + MB[1])
+        P = 960 - (y0 + TAPE_L[-1][1] + off[1] * K_M0)
         self.PAN = [(0, 0), (9.35, 0), (9.9, 0.12 * P), (10.6, 0.58 * P), (11.3, 0.93 * P), (12.6, P)]
         # the money only exists on the tape once its end is out of frame
         self.t_att = 12.0
@@ -358,55 +360,41 @@ class Film:
         Y = Y0[0] + s + A * (np.cos(ph) - math.cos(1.2)) * grow
         return (X, Y), (X[-1], Y[-1])
 
-    def money_layer(self, b, col, gl, solid, t, SX, SY, hang):
+    def money_pose(self, t, hang):
+        """the money photo on screen: centre, scale, tilt; it swings on the tape, then the camera pushes in
+        until it fills the frame (where the bars scene takes it over)"""
         tw = t - 9.95
-        swing = 0.1 * math.sin(2.4 * tw) * math.exp(-max(tw, 0) / 1.8) + 0.02 * math.sin(t * 1.1)
-        twist = 0.55 * math.sin(t * 0.8) + 0.2
-        fall = 0.0
-        if t > T_CUT:
-            fall = 0.5 * 7000 * (t - T_CUT) ** 2
-            swing += 0.6 * (t - T_CUT)
-        hx_, hy_ = hang
-        cx_ = hx_ - math.sin(swing) * (20 + MB[1])
-        cy_ = hy_ + math.cos(swing) * (20 + MB[1]) + fall
-        sel = (np.abs(SX - cx_) < 320) & (np.abs(SY - cy_) < 320)
-        if not sel.any():
-            return
-        dx, dy = SX[sel] - cx_, SY[sel] - cy_
-        c, s = math.cos(-swing), math.sin(-swing)
-        lx, ly = dx * c - dy * s, dx * s + dy * c
-        Rm = rot(twist, 0.12)
-        o = np.stack([lx, ly, np.full(len(lx), 300.0)], 1) @ Rm
-        dv = np.array([0.0, 0.0, -1.0]) @ Rm
-        bx, by, bz = MB
-        def box(x, y, z):
-            qx, qy, qz = np.abs(x) - bx + 6, np.abs(y) - by + 6, np.abs(z) - bz + 6
-            return (np.sqrt(np.maximum(qx, 0) ** 2 + np.maximum(qy, 0) ** 2 + np.maximum(qz, 0) ** 2) +
-                    np.minimum(np.maximum(qx, np.maximum(qy, qz)), 0) - 6)
-        tt, hit = march(box, o, dv, 100.0, 520.0, steps=32, eps=0.5)
-        if not hit.any():
-            return
-        p = o[hit] + tt[hit, None] * dv
-        x, y, z = p[:, 0], p[:, 1], p[:, 2]
-        fx, fy, fz = np.abs(x) / bx, np.abs(y) / by, np.abs(z) / bz
-        n = np.zeros_like(p)
-        ax = np.argmax(np.stack([fx, fy, fz], 1), 1)
-        n[np.arange(len(p)), ax] = np.sign(p[np.arange(len(p)), ax])
-        nc = n @ Rm.T
-        lam = np.clip(nc @ unit(-0.75, -0.35, 0.55), 0, 1)
-        # the bill on the front and back, page edges on the sides, a rubber band around the middle
-        face = ax == 2
-        tx = np.clip((np.where(z > 0, x, -x) + bx).astype(int), 0, self.bill.shape[1] - 1)
-        ty = np.clip((y + by).astype(int), 0, self.bill.shape[0] - 1)
-        pat = np.where(face, self.bill[ty, tx], 0.38 + 0.35 * (np.sin(z * 1.7) > 0))
-        pat = np.where(np.abs(y) < 11, 0.12, pat)                               # the rubber band
-        bb = np.clip((0.4 + 0.9 * lam) * pat ** 1.4 * 1.35, 0, 1)
-        idxs = np.nonzero(sel)
-        hr, hc = idxs[0][hit], idxs[1][hit]
-        b[hr, hc] = bb
-        col[hr, hc] = redmap(bb * 1.05)
-        gl[hr, hc] = 0
-        solid[hr, hc] = True
+        phi0 = 0.07 * math.sin(2.4 * tw) * math.exp(-max(tw, 0) / 1.8) + 0.025 * math.sin(t * 1.1)
+        ox, oy = MONEY_C[0] - MONEY_KNOT[0], MONEY_C[1] - MONEY_KNOT[1]
+        c, s = math.cos(phi0), math.sin(phi0)
+        c0 = (hang[0] + (ox * c - oy * s) * K_M0, hang[1] + (ox * s + oy * c) * K_M0)
+        e = float(smoother(T_PUSH, T_B, t))
+        K = K_M0 * (K_M1 / K_M0) ** e
+        phi = phi0 + (PHI_M1 - phi0) * e
+        cx, cy = c0[0] + (540 - c0[0]) * e, c0[1] + (960 - c0[1]) * e
+        c, s = math.cos(phi), math.sin(phi)
+        knot = (cx - (ox * c - oy * s) * K, cy - (ox * s + oy * c) * K)
+        return cx, cy, K, phi, knot
+
+    def money_texture(self, AX, AY):
+        """brightness, colour, coverage of the money photo at its own px"""
+        rgba = sample(self.money, AX, AY)
+        a = np.clip((rgba[..., 3] - 0.35) / 0.3, 0, 1)
+        rgb = rgba[..., :3]
+        lum = 0.5 * rgb[..., 0] + 0.35 * rgb[..., 1] + 0.15 * rgb[..., 2]
+        b = np.clip((lum - 0.22) / 0.62, 0, 1) ** 1.25
+        cc = rgb / (rgb.max(-1, keepdims=True) + 0.02)
+        return b, cc, a > 0.5
+
+    def money_layer(self, b, col, gl, solid, t, SX, SY, hang):
+        cx, cy, K, phi, knot = self.money_pose(t, hang)
+        c, s = math.cos(phi), math.sin(phi)
+        dx, dy = SX - cx, SY - cy
+        AX = MONEY_C[0] + (dx * c + dy * s) / K
+        AY = MONEY_C[1] + (-dx * s + dy * c) / K
+        mb, mc, on = self.money_texture(AX, AY)
+        b[on] = mb[on]; col[on] = mc[on]; gl[on] = 0; solid[on] = True
+        return knot
 
     def scene_a(self, t, SX, SY, fi):
         shape = (FROWS, FCOLS)
@@ -501,19 +489,19 @@ class Film:
             gl = np.where(on, SOFT[np.clip((glow * 1.8 * (len(SOFT) - 1)).astype(int) + jr, 0, len(SOFT) - 1)], gl)
             b = np.where(on, glow, b); col = np.where(on[..., None], redmap(glow * 1.4), col)
 
-        # the tape, then the money hanging off its end
+        # the tape, then the money hanging off its end; once the camera pushes in, just its string
         pts, hang = self.tape(t)
         if pts is not None:
             X, Y = pts
-            if t > T_CUT:                                       # the end springs back up when the money drops
-                k = Y > hang[1] - 30 * (1 - math.exp(-(t - T_CUT) / 0.08))
-                X, Y = X[~k], Y[~k]
-                hang = (hang[0], hang[1] - 30 * (1 - math.exp(-(t - T_CUT) / 0.08)))
-            splat(gl, col, solid, X, Y, HOT)
-            b[np.round((np.clip(Y, -1e4, 1e4) - FOY) / FCH - 0.5).astype(int).clip(0, FROWS - 1),
-              np.round(np.clip(X, -1e4, 1e4) / FCW - 0.5).astype(int).clip(0, FCOLS - 1)] = 0.95
+            if t < T_PUSH:
+                splat(gl, col, solid, X, Y, HOT, b, 0.95)
             if t >= self.t_att:
-                self.money_layer(b, col, gl, solid, t, SX, SY, (pts[0][-1], pts[1][-1]))
+                knot = self.money_layer(b, col, gl, solid, t, SX, SY, hang)
+                if t >= T_PUSH:
+                    _, _, K, _, _ = self.money_pose(t, hang)
+                    st = (np.abs(SX - knot[0]) < max(0.55 * FCW, 2.2 * K)) & (SY < knot[1])
+                    b = np.where(st, 0.8, b); col = np.where(st[..., None], HOT, col)
+                    gl = np.where(st, CI["|"], gl); solid |= st
         return b, col, gl, solid
 
     # ---------- scene B: bars, the eye, the wall of eyes, the red square, the line
@@ -531,15 +519,19 @@ class Film:
         self.eye_open = 16.85 + 0.05 * dist
         self.eye_close = 20.05 + 0.9 * (1 - dist / dist.max())
         self.eye_ph = rng.uniform(0, 6.3, len(eyes))
+        self.eye_blink = rng.uniform(18.3, 19.8, len(eyes))
 
     def cam_b(self, t):
         Z = math.exp(ckey(t, LOGZ))
         cx, cy = ckey(t, CX), ckey(t, CY)
-        w = float(smoother(25.25, 26.5, t))
-        if w > 0:                                   # follow the falling tear / the heartbeat line
-            tip = self.tear_tip(t)
-            lead = 300 / (EU * Z)
-            cx, cy = cx + (self.tear_x - cx) * w, cy + (tip[1] + lead - cy) * w
+        w = float(smoother(25.2, 25.9, t))
+        if w > 0:                                   # follow the falling tear, its tip a little below the middle
+            tx, ty = self.tear_tip(t)
+            cx, cy = cx + (tx * 0.5 + 0.08 - cx) * w, cy + (ty + 0.7 - cy) * w
+        f = float(smoother(27.7, 29.2, t))
+        if f > 0:                                   # pull back: the eye, the square and the whole line under it
+            cx, cy = cx + (self.end_cx - cx) * f, cy + (self.end_cy - cy) * f
+            Z = math.exp(math.log(Z) * (1 - f) + math.log(self.end_z) * f)
         return cx, cy, Z, ckey(t, ROLLB)
 
     def to_eye(self, SX, SY, cam):
@@ -559,39 +551,47 @@ class Film:
             return 1 - float(smoother(self.eye_close[0], self.eye_close[0] + 0.2, t))
         return float(smoother(23.0, 23.6, t))
 
-    def flesh(self, X, Y, t, Z=1.0):
-        n = fbm(X * 1.1, Y * 1.1, 3, 23)
-        ridge = np.abs(fbm(X * 0.9 + 3, Y * 1.6, 3, 29) - 0.5)
-        b = 0.44 + 0.26 * n + 0.3 * sstep(0.66, 0.8, fbm(X * 0.7 + t * 0.03, Y * 0.7, 2, 31))
-        folds = ridge < 0.02 * min(1.0, 0.7 / Z)
-        return np.where(folds, 0.0, b), folds
-
     def cell(self, X, Y, t, fi):
-        """inside the prison: black, strings that fall and harden into bars, a crossbar, two fists"""
+        """inside the prison: the money is cut into strips that narrow into iron bars; a crossbar, two fists"""
         shape = X.shape
         b = np.zeros(shape); col = np.zeros(shape + (3,), np.float32)
         gl = np.zeros(shape, np.int64); solid = np.zeros(shape, bool)
-        top = ckey(T_B, CY) + 0.6
-        rb = 0.0015 + (BAR_R - 0.0015) * float(smoother(13.15, 13.65, t))
-        y0 = self.knot_y
-        for k in range(-5, 6):
+        Z = math.exp(ckey(t, LOGZ))
+        cut = float(smoother(T_B, T_B + 0.18, t))                 # slits open
+        e = float(smoother(T_B + 0.15, 13.5, t))                  # strips narrow into bars
+        rbar = max(BAR_R, 0.55 * FCW / (EU * Z))
+        slit = 0.7 * FCW / (EU * Z) * cut
+        cx0, cy0, Z0 = self.cam_t_b
+        k0 = int(math.floor((X.min() + BAR_DX / 2) / BAR_DX)) - 1
+        k1 = int(math.ceil((X.max() - BAR_DX / 2) / BAR_DX)) + 1
+        for k in range(max(k0, -8), min(k1, 8) + 1):
             xk = k * BAR_DX
-            if k == 0:
-                yend = y0 + (-2.5 - y0) * float(smoother(T_B + 0.02, 13.1, t))
-            else:
-                tk = 12.75 + 0.06 * abs(k) + 0.03 * (k > 0)
-                yend = top + (-2.5 - top) * float(np.clip((t - tk) / 0.42, 0, 1)) ** 1.6
-                if t < tk: continue
-            rr = max(rb, 0.5 * FCW / (EU * math.exp(ckey(t, LOGZ))))
-            dxn = (X - xk) / rr
-            on = (np.abs(dxn) < 1) & (Y > yend)
+            half = (BAR_DX / 2 - slit) * (1 - e) + rbar * e
+            dx = X - xk
+            on = np.abs(dx) < half
             if not on.any(): continue
+            dxn = np.clip(dx / half, -1, 1)
             nz = np.sqrt(np.clip(1 - dxn ** 2, 0, 1))
-            bb = 0.2 + 0.6 * np.clip(-0.55 * dxn + 0.8 * nz, 0, 1) + 0.35 * np.exp(-((dxn + 0.35) / 0.18) ** 2)
-            bb = np.clip(bb, 0, 1)
-            b = np.where(on, bb, b); col = np.where(on[..., None], redmap(bb), col)
-            gl = np.where(on, np.where((np.abs(dxn + 0.35) < 0.2) | (rr < 0.003), CI["|"], 0), gl)
-            solid |= on
+            metal = np.clip(0.2 + 0.6 * np.clip(-0.55 * dxn + 0.8 * nz, 0, 1) + 0.35 * np.exp(-((dxn + 0.35) / 0.18) ** 2), 0, 1)
+            if e < 1:
+                slide = 0.035 * math.sin(k * 2.3 + 1) * cut          # shredded strips slip a little
+                AX = MONEY_C[0] + (X - cx0) * EU * Z0 / K_M1
+                AY = MONEY_C[1] - (Y + slide - cy0) * EU * Z0 / K_M1
+                c, s = math.cos(PHI_M1), math.sin(PHI_M1)
+                dxs, dys = (AX - MONEY_C[0]) * K_M1, (AY - MONEY_C[1]) * K_M1
+                AX, AY = MONEY_C[0] + (dxs * c + dys * s) / K_M1, MONEY_C[1] + (-dxs * s + dys * c) / K_M1
+                mb, mc, mon = self.money_texture(AX, AY)
+                mb = np.where(mon, mb, 0.0)
+                bb = mb * (1 - e) + metal * e
+                cc = mc * (1 - e) + redmap(metal) * e
+                edge = np.abs(np.abs(dxn) - 1) < 0.06 / max(1 - e, 0.06) * (cut > 0.2)
+                bb = np.where(edge & (e < 0.5), np.maximum(bb, 0.9), bb)
+                cc = np.where((edge & (e < 0.5))[..., None], HOT, cc)
+            else:
+                bb, cc = metal, redmap(metal)
+            b = np.where(on, bb, b); col = np.where(on[..., None], cc, col)
+            gl = np.where(on, np.where((e > 0.85) & ((np.abs(dxn + 0.35) < 0.2) | (rbar < 0.003)), CI["|"], 0), gl)
+            solid |= on & (bb > 0.02)
         # the crossbar slams in on the hit
         xe = -1.6 + 3.1 * float(np.clip((t - 13.95) / 0.09, 0, 1)) ** 2
         if xe > -1.6:
@@ -631,172 +631,208 @@ class Film:
                 b[hr, hc] = bb; col[hr, hc] = redmap(bb); gl[hr, hc] = 0; solid[hr, hc] = True
         return b, col, gl, solid
 
-    def paint_eye(self, xl, yl, op, gx, gy, t, poster, rnd):
-        """an eye in its own units: lids, sclera, iris, pupil, highlight, lashes"""
+    def flesh(self, X, Y, t, Z=1.0):
+        """skin between the eyes: red, mottled, scratched with ink like an etching"""
+        n = fbm(X * 1.1, Y * 1.1, 3, 23)
+        ridge = np.abs(fbm(X * 0.9 + 3, Y * 1.6, 3, 29) - 0.5)
+        b = 0.44 + 0.26 * n + 0.3 * sstep(0.66, 0.8, fbm(X * 0.7 + t * 0.03, Y * 0.7, 2, 31))
+        thin = min(1.0, 0.7 / Z)
+        folds = ridge < 0.02 * thin
+        hatch = ((np.sin(X * 46 + 7 * fbm(X * 0.7, Y * 0.5, 2, 91)) > 1 - 0.07 * thin) &
+                 (fbm(X * 1.4 + 5, Y * 0.35, 2, 93) > 0.52))
+        dark = folds | hatch
+        return np.where(dark, 0.0, b), dark
+
+    def paint_eye(self, xl, yl, op, gx, gy, t, rnd):
+        """an eye in its own units: shaded sclera with veins, a fibrous iris, pupil, wet highlights,
+        inked lids with a crease and curved lashes"""
         sx, y_low, y_up = lids(xl, op)
         inside = (np.abs(xl) < EX) & (yl > y_low) & (yl < y_up)
         b = np.zeros(xl.shape); col = np.zeros(xl.shape + (3,), np.float32)
         gl = np.zeros(xl.shape, np.int64); solid = np.zeros(xl.shape, bool)
         d = np.hypot(xl - gx, yl - gy)
-        if poster:
-            b = np.where(inside, 0.62, b); col = np.where(inside[..., None], RED, col)
-            iris = inside & (d < 0.36)
-            b = np.where(iris, 0.0, b); solid |= iris
-            ring = np.abs(np.hypot(xl - gx - 0.07, yl - gy - 0.09) - 0.05) < 0.016
-            b = np.where(iris & ring, 1.0, b); col = np.where((iris & ring)[..., None], PALE, col)
-            gl = np.where(iris & ring, CI["o"], gl)
-            band = (np.abs(np.minimum(yl - y_low, y_up - yl)) < 0.1) & (np.abs(xl) < EX + 0.08)
-            stip = band & (rnd < 0.55)
-            b = np.where(stip, 0.0, b); solid |= stip
-        else:
-            ball = np.clip(1 - (xl / 1.4) ** 2, 0, 1)
-            shadow = sstep(0.0, 0.14, y_up - yl)
-            scl = (0.45 + 0.35 * ball) * (0.55 + 0.45 * shadow)
-            vein = np.abs(fbm(xl * 6 + 7, yl * 6, 3, 61) - 0.5) < 0.014
-            b = np.where(inside, np.where(vein, 0.5, scl), b)
-            col = np.where(inside[..., None], np.where(vein[..., None], RED, HOT), col)
-            a = np.arctan2(yl - gy, xl - gx)
-            fib = 0.5 + 0.5 * np.sin(a * 60 + 8 * fbm(np.cos(a) * 4, np.sin(a) * 4, 2, 21))
-            iris = inside & (d < 0.33)
-            ib = (0.25 + 0.3 * fib) * (1 - 0.7 * sstep(0.26, 0.33, d))
-            b = np.where(iris, ib, b); col = np.where(iris[..., None], redmap(ib + 0.15), col)
-            gl = np.where(iris & (fib > 0.7), stroke_glyph(np.arctan2(np.sin(a) / FCH, np.cos(a) / FCW)), gl)
-            pup = inside & (d < 0.13)
-            b = np.where(pup, 0.0, b); solid |= pup
-            hl = inside & ((np.hypot(xl - gx + 0.1, yl - gy - 0.11) < 0.06) | (np.hypot(xl - gx - 0.08, yl - gy + 0.06) < 0.025))
-            b = np.where(hl, 1.0, b); col = np.where(hl[..., None], PALE, col)
-            gl = np.where(hl, CI["@"], gl)
-        # black outline along both lids, lashes above
-        line = (np.abs(xl) < EX + 0.04) & ((np.abs(yl - y_up) < 0.035) | (np.abs(yl - y_low) < 0.03) | (inside & (np.minimum(yl - y_low, y_up - yl) < 0.03)))
-        lh = 0.2 * sx ** 0.6 * (0.45 + 0.55 * op)
-        above = (yl - y_up > 0) & (yl - y_up < lh) & (np.abs(xl) < EX)
-        ph = xl * 18 + (yl - y_up) * 7 * np.sign(xl)
-        lash = above & ((ph % 1.0) < 0.32)
-        below = (y_low - yl > 0) & (y_low - yl < 0.06 * sx) & (((xl * 22) % 1.0) < 0.3)
-        dark = line | lash | below
+        ball = np.clip(1 - (xl / 1.45) ** 2 - 0.4 * (yl / 0.7) ** 2, 0, 1)
+        shadow = sstep(0.0, 0.18, y_up - yl)
+        corner = sstep(0.0, 0.4, EX - np.abs(xl))
+        scl = (0.5 + 0.42 * ball) * (0.4 + 0.6 * shadow) * (0.55 + 0.45 * corner)
+        vein = (np.abs(fbm(xl * 5 + 7, yl * 5, 3, 61) - 0.5) < 0.013) & (np.abs(xl - gx) > 0.4)
+        b = np.where(inside, np.where(vein, 0.5, scl), b)
+        scol = PALE * corner[..., None] + HOT * (1 - corner[..., None])
+        col = np.where(inside[..., None], np.where(vein[..., None], RED, scol), col)
+        gl = np.where(inside, SHADE[np.clip((scl * 1.15 * len(SHADE)).astype(int), 0, len(SHADE) - 1)], gl)
+        a = np.arctan2(yl - gy, xl - gx)
+        fn = fbm(np.cos(a) * 5 + d * 6, np.sin(a) * 5 + d * 6, 3, 21)
+        fib = 0.5 + 0.5 * np.sin(a * 70 + 9 * fn)
+        iris = inside & (d < 0.36)
+        ib = (0.16 + 0.34 * fib * (0.6 + 0.4 * fn)) * (1 - 0.85 * sstep(0.29, 0.36, d))
+        ib = ib + 0.22 * np.exp(-((d - 0.2) / 0.025) ** 2)                      # collarette
+        ib = ib * (0.55 + 0.45 * shadow)
+        b = np.where(iris, ib, b); col = np.where(iris[..., None], redmap(ib * 1.3 + 0.12), col)
+        gl = np.where(iris & (fib > 0.66) & (d > 0.15), stroke_glyph(np.arctan2(np.sin(a) / FCH, np.cos(a) / FCW)), gl)
+        pup = inside & (d < 0.14)
+        b = np.where(pup, 0.0, b); solid |= pup
+        hl1 = np.hypot((xl - gx + 0.11) / 1.2, yl - gy - 0.12) < 0.065
+        hl2 = np.hypot(xl - gx - 0.1, yl - gy + 0.08) < 0.03
+        hl = inside & (hl1 | hl2)
+        b = np.where(hl, 1.0, b); col = np.where(hl[..., None], PALE, col)
+        gl = np.where(hl, CI["@"], gl)
+        wl = inside & (yl - y_low < 0.035) & (np.abs(xl) < EX * 0.9)          # wet lower waterline
+        b = np.where(wl, np.maximum(b, 0.75), b); col = np.where(wl[..., None], PALE, col)
+        # inked lids: thick upper line, thin lower line, a crease above, curved lashes
+        line = (np.abs(xl) < EX + 0.04) & ((np.abs(yl - y_up) < 0.045) | (np.abs(yl - y_low) < 0.025))
+        crease = (np.abs(yl - (y_up + 0.16 * sx ** 0.5)) < 0.018) & (np.abs(xl) < EX * 0.9)
+        lh = 0.22 * sx ** 0.6 * (0.45 + 0.55 * op)
+        h = yl - y_up
+        above = (h > 0) & (h < lh) & (np.abs(xl) < EX)
+        lean = xl * 0.9 + 0.6 * h / np.maximum(lh, 1e-3) * np.sign(xl)       # lashes fan out and curl
+        lash = above & (((xl - h * lean) * 15) % 1.0 < 0.3 - 0.2 * h / np.maximum(lh, 1e-3))
+        hb = y_low - yl
+        below = (hb > 0) & (hb < 0.07 * sx) & (((xl + hb * xl * 2) * 24) % 1.0 < 0.25)
+        dark = line | crease | lash | below
         b = np.where(dark, 0.0, b); solid |= dark
-        region = (np.abs(xl) < EX + 0.06) & (yl > y_low - 0.1) & (yl < y_up + lh + 0.04)
-        return b, col, gl, solid, region | inside
+        return b, col, gl, solid, inside | dark                             # skin shows between the lashes
 
     def scene_b(self, t, SX, SY, fi):
         shape = (FROWS, FCOLS)
         cam = self.cam_b(t)
         X, Y = self.to_eye(SX, SY, cam)
         Z = cam[2]
-        b, folds = self.flesh(X, Y, t, Z)
-        col = redmap(b); gl = np.zeros(shape, np.int64); solid = folds | (b > 0.03)
-        poster_t = 21.6
-        for i, (ex, ey, es, er) in enumerate(self.eyes):
-            pxc, pyc = self.from_eye(np.array([ex]), np.array([ey]), cam)
-            rad = 1.9 * es * EU * Z
-            r0, r1 = int((pyc[0] - rad - FOY) / FCH), int((pyc[0] + rad - FOY) / FCH) + 2
-            c0, c1 = int((pxc[0] - rad) / FCW), int((pxc[0] + rad) / FCW) + 2
-            r0, r1, c0, c1 = max(r0, 0), min(r1, FROWS), max(c0, 0), min(c1, FCOLS)
-            if r0 >= r1 or c0 >= c1: continue
-            sl = (slice(r0, r1), slice(c0, c1))
-            cs, sn = math.cos(-er), math.sin(-er)
-            xl0, yl0 = (X[sl] - ex) / es, (Y[sl] - ey) / es
-            xl, yl = xl0 * cs - yl0 * sn, xl0 * sn + yl0 * cs
-            # folds of skin around every eye
-            e = (xl / 1.5) ** 2 + (yl / 0.85) ** 2
-            ring = (e > 1.05) & (e < 2.8) & (((e * 2.2 + 0.2 * fbm(xl * 2, yl * 2, 2, 71)) % 1.0) < 0.09 * min(1.0, 0.8 / (Z * es)))
-            b[sl] = np.where(ring, 0.0, b[sl])
-            if i == 0:
-                op = self.hero_open(t)
-                gx = 0.04 * math.sin(t * 0.6); gy = 0.02 * math.sin(t * 0.8)
-            else:
-                op = float(smoother(self.eye_open[i], self.eye_open[i] + 0.25, t)) * (1 - float(smoother(self.eye_close[i], self.eye_close[i] + 0.2, t)))
-                ph = self.eye_ph[i]
-                gx = 0.12 * math.sin(t * 0.7 + ph) + 0.05 * (math.sin(t * 3.1 + ph) > 0.7)
-                gy = 0.05 * math.sin(t * 0.5 + 2 * ph)
-            eb, ec, eg, es_, reg = self.paint_eye(xl, yl, op, gx, gy, t, i == 0 and t > poster_t, self.rand[sl])
-            if i == 0 and t < poster_t:
-                inside_h = (np.abs(xl) < EX) & (yl > lids(xl, op)[1]) & (yl < lids(xl, op)[2])
-                if inside_h.any():
-                    cb, cc, cg, csd = self.cell(X[sl], Y[sl], t, fi)
-                    eb = np.where(inside_h, cb, eb); ec = np.where(inside_h[..., None], cc, ec)
-                    eg = np.where(inside_h, cg, eg); es_ = np.where(inside_h, csd, es_ & ~inside_h)
-            b[sl] = np.where(reg, eb, b[sl]); col[sl] = np.where(reg[..., None], ec, col[sl])
-            gl[sl] = np.where(reg, eg, gl[sl]); solid[sl] = np.where(reg, es_ | (eb > 0.03), solid[sl])
-        col = np.where((b > 0.03)[..., None] & (col.max(-1, keepdims=True) == 0), redmap(b), col)
+        if t < 24.3:
+            b, folds = self.flesh(X, Y, t, Z)
+            col = redmap(b); gl = np.zeros(shape, np.int64); solid = folds | (b > 0.03)
+            look = float(smoother(17.9, 18.02, t))                      # "flaw in your design": they all look at you
+            for i, (ex, ey, es, er) in enumerate(self.eyes):
+                pxc, pyc = self.from_eye(np.array([ex]), np.array([ey]), cam)
+                rad = 1.9 * es * EU * Z
+                r0, r1 = int((pyc[0] - rad - FOY) / FCH), int((pyc[0] + rad - FOY) / FCH) + 2
+                c0, c1 = int((pxc[0] - rad) / FCW), int((pxc[0] + rad) / FCW) + 2
+                r0, r1, c0, c1 = max(r0, 0), min(r1, FROWS), max(c0, 0), min(c1, FCOLS)
+                if r0 >= r1 or c0 >= c1: continue
+                sl = (slice(r0, r1), slice(c0, c1))
+                cs, sn = math.cos(-er), math.sin(-er)
+                xl0, yl0 = (X[sl] - ex) / es, (Y[sl] - ey) / es
+                xl, yl = xl0 * cs - yl0 * sn, xl0 * sn + yl0 * cs
+                e = (xl / 1.5) ** 2 + (yl / 0.85) ** 2
+                ring = (e > 1.05) & (e < 2.8) & (((e * 2.2 + 0.2 * fbm(xl * 2, yl * 2, 2, 71)) % 1.0) < 0.09 * min(1.0, 0.8 / (Z * es)))
+                b[sl] = np.where(ring, 0.0, b[sl])
+                if i == 0:
+                    op = self.hero_open(t)
+                    gx = 0.04 * math.sin(t * 0.6); gy = 0.02 * math.sin(t * 0.8)
+                else:
+                    op = float(smoother(self.eye_open[i], self.eye_open[i] + 0.25, t)) * (1 - float(smoother(self.eye_close[i], self.eye_close[i] + 0.2, t)))
+                    blink = math.exp(-((t - self.eye_blink[i]) / 0.06) ** 2)
+                    op *= 1 - blink
+                    ph = self.eye_ph[i]
+                    gx = (0.12 * math.sin(t * 0.7 + ph) + 0.05 * (math.sin(t * 3.1 + ph) > 0.7)) * (1 - look)
+                    gy = 0.05 * math.sin(t * 0.5 + 2 * ph) * (1 - look)
+                eb, ec, eg, es_, reg = self.paint_eye(xl, yl, op, gx, gy, t, self.rand[sl])
+                if i == 0 and t < 22.5:
+                    inside_h = (np.abs(xl) < EX) & (yl > lids(xl, op)[1]) & (yl < lids(xl, op)[2])
+                    if inside_h.any():
+                        cb, cc, cg, csd = self.cell(X[sl], Y[sl], t, fi)
+                        eb = np.where(inside_h, cb, eb); ec = np.where(inside_h[..., None], cc, ec)
+                        eg = np.where(inside_h, cg, eg); es_ = np.where(inside_h, csd, es_ & ~inside_h)
+                b[sl] = np.where(reg, eb, b[sl]); col[sl] = np.where(reg[..., None], ec, col[sl])
+                gl[sl] = np.where(reg, eg, gl[sl]); solid[sl] = np.where(reg, es_ | (eb > 0.03), solid[sl])
+            col = np.where((b > 0.03)[..., None] & (col.max(-1, keepdims=True) == 0), redmap(b), col)
+        else:
+            b = np.zeros(shape); col = np.zeros(shape + (3,), np.float32)
+            gl = np.zeros(shape, np.int64); solid = np.zeros(shape, bool)
 
-        # the red square: everything else sinks into black, the square goes flat red
-        if t > 22.5:
-            hw, yb, yt = SQ
-            wob = 0.03 * (fbm(X * 4, Y * 4, 2, 81) - 0.5)
-            insq = (np.abs(X) < hw + wob) & (Y > yb + wob) & (Y < yt + wob)
-            rc = np.hypot(X / 1.4, (Y + 0.3) / 1.4)
-            sw = 22.55 + 0.25 * np.clip(rc / 4, 0, 1) + 0.6 * self.rand
-            a = sstep(sw, sw + 0.35, t)
-            hero = (np.abs(X) < EX + 0.1) & (Y > -0.6) & (Y < 0.8)
-            flat = insq & ~hero
-            stip = flat & (self.rand < 0.06 + 0.5 * np.exp(-((np.abs(X) - 0.0) ** 2 / 2.0 + (Y - 0.1) ** 2 / 0.25)))
-            fb = np.where(stip, 0.0, 0.62)
-            b = np.where(flat, b * (1 - a) + fb * a, np.where(insq, b, b * (1 - a)))
-            col = np.where(flat[..., None], col * (1 - a[..., None]) + RED * a[..., None], col)
-            gl = np.where(flat & (a > 0.5), 0, gl)
-            solid = np.where(insq, solid, solid & (a < 0.5))
-            dec = (t > sw - 0.06) & (t < sw) & insq
+        # the eye opens into the red square (the reference), sweeping out from the eye in code
+        if t > 22.6:
+            rb, rc, rg, rsolid = self.red_square(X, Y, t, fi)
+            sw = 22.85 + 0.8 * np.clip(np.hypot(X, Y * 1.2) / 4.5, 0, 1) + 0.25 * self.rand
+            on = t >= sw
+            b = np.where(on, rb, b); col = np.where(on[..., None], rc, col)
+            gl = np.where(on, rg, gl); solid = np.where(on, rsolid, solid)
+            dec = (t > sw - 0.09) & (t < sw)
             rng = np.random.default_rng(fi + 11)
             gl = np.where(dec, rng.choice(PRINTABLE, shape), gl)
+            b = np.where(dec, 0.85, b); col = np.where(dec[..., None], HOT, col); solid |= dec
 
         # the tear, then the heartbeat line
         if t > T_TEAR - 0.35:
             self.draw_line(b, col, gl, solid, t, cam)
         return b, col, gl, solid
 
-    # ---------- the tear and the line it becomes
-    @property
-    def tear_x(self):
-        return 0.0
+    def red_square(self, X, Y, t, fi):
+        """the reference: an eye over a red square, drawn in code. It opens out of the closed hero eye and
+        closes again at the very end"""
+        RX, RY = REF_E[0] + X * REF_U, REF_E[1] - Y * REF_U
+        hw, ylo, yhi = REF_AP
+        ap = (np.abs(X) < hw) & (Y > ylo - 0.05) & (Y < yhi + 0.05)
+        # shut: the upper lid's skin slides down over the eye (opening at 23, closing at the end)
+        op = self.hero_open(t) * (1 - float(smoother(28.9, 29.6, t)))
+        lid_y = ylo + (yhi + 0.05 - ylo) * op
+        shut = ap & (Y > lid_y)
+        RY = np.where(shut, RY - (yhi + 0.05 - lid_y) * REF_U, RY)
+        rgb = sample(self.ref_eye, RX, RY)
+        mx = rgb.max(-1)
+        b = np.clip(mx * 1.15, 0, 1)
+        col = rgb / (mx[..., None] + 0.03)
+        seam = ap & (np.abs(Y - lid_y) < 0.03) & (op < 0.98)
+        b = np.where(seam, 0.0, b)
+        gl = np.where((b > 0.5) & (self.code_idx > 0) & (self.rand < 0.3), self.code_idx, 0)   # code woven into the red
+        solid = (b > 0.16) | seam
+        b = np.where(solid, b, 0.0)
+        return b, col.astype(np.float32), gl, solid
 
+    # ---------- the tear and the line it becomes
     def tear_s(self, t):
         tau = t - T_TEAR
         if tau <= 0: return 0.0
         t1 = TEAR_V / TEAR_A
         return 0.5 * TEAR_A * tau ** 2 if tau < t1 else 0.5 * TEAR_A * t1 ** 2 + TEAR_V * (tau - t1)
 
+    def tear_xy(self, s):
+        return TEAR0[0] + TEAR_SLANT * s + self.ecg(s), TEAR0[1] - s
+
     def tear_tip(self, t):
-        y0 = float(lids(np.array([self.tear_x]), 1.0)[1][0])
-        return self.tear_x, y0 - self.tear_s(t)
+        x, y = self.tear_xy(np.array([self.tear_s(t)]))
+        return float(x[0]), float(y[0])
 
     def ecg(self, s):
         h = np.zeros_like(s)
         for tb, A in self.tear_beats:
-            sg = s - self.tear_s(tb)
+            sg = (s - self.tear_s(tb)) / 4.0                    # stretched along the line so it reads as a heartbeat
             h += A * (0.07 * np.exp(-((sg - 0.08) / 0.035) ** 2) - 0.06 * np.exp(-((sg - 0.26) / 0.012) ** 2) +
                       np.exp(-((sg - 0.30) / 0.016) ** 2) - 0.25 * np.exp(-((sg - 0.335) / 0.014) ** 2) +
                       0.16 * np.exp(-((sg - 0.55) / 0.05) ** 2))
         return h
 
     def draw_line(self, b, col, gl, solid, t, cam):
-        y0 = float(lids(np.array([self.tear_x]), 1.0)[1][0])
+        """the tear: a thick white line like the reference, glowing, that kicks into two heartbeats, then runs flat"""
         s_tip = self.tear_s(t)
+        Z = cam[2]
+        pulse = sum(math.exp(-(t - tb) / 0.18) for tb, _ in BEATS if t >= tb)
         bead = float(smoother(T_TEAR - 0.35, T_TEAR, t))
         if s_tip > 0:
-            s = np.arange(0, s_tip, 0.0015)
-            xs = self.tear_x + self.ecg(s)
-            ys = y0 - s
+            s = np.concatenate([np.arange(0, s_tip, 0.4 / (EU * Z)), [s_tip]])
+            xs, ys = self.tear_xy(s)
             SXl, SYl = self.from_eye(xs, ys, cam)
-            age = (s_tip - s) / TEAR_V
-            c = PALE[None, :] * (0.7 + 0.3 * np.exp(-age / 0.6))[:, None]
             nx, ny = np.gradient(SYl), -np.gradient(SXl)
             nl = np.hypot(nx, ny) + 1e-9
-            for off in (-0.6, 0.6):                     # two cells wide
-                splat(gl, col, solid, SXl + nx / nl * FCW * off, SYl + ny / nl * FCH * off, c, b, 0.95)
-            rr = np.round((SYl - FOY) / FCH - 0.5).astype(int); cc = np.round(SXl / FCW - 0.5).astype(int)
-            ok = (rr >= 0) & (rr < FROWS) & (cc >= 0) & (cc < FCOLS)
-            b[rr[ok], cc[ok]] = 0.9
+            nx, ny = nx / nl, ny / nl
+            hw = max(0.028 * EU * Z, 0.6 * FCW)
+            age = (s_tip - s) / TEAR_V
+            for off in np.arange(-hw - 2 * FCW, hw + 2 * FCW + 0.1, 0.8 * FCW):
+                core = abs(off) <= hw
+                lv = 1.0 if core else 0.35 * math.exp(-(abs(off) - hw) / FCW)
+                c = (PALE if core else HOT)[None, :] * np.clip(lv * (0.8 + 0.2 * np.exp(-age / 0.5) + 0.3 * pulse), 0, 1.2)[:, None]
+                splat(gl, col, solid, SXl + nx * off, SYl + ny * off, np.clip(c, 0, 1), b, min(1.0, 0.95 * lv + 0.2 * pulse),
+                      BLOCK if abs(off) < hw * 0.6 else None)
         # the drop (or the bright head of the line)
-        tx, ty = self.tear_x + float(self.ecg(np.array([s_tip]))[0]), y0 - s_tip - 0.03 * bead
-        px, py = self.from_eye(np.array([tx]), np.array([ty]), cam)
-        rpx = (6 + 10 * bead) * (1 if s_tip <= 0 else 1.4)
+        tx, ty = self.tear_tip(t)
+        px, py = self.from_eye(np.array([tx]), np.array([ty - 0.03 * bead]), cam)
+        rpx = (5 + 9 * bead) * (1 if s_tip <= 0 else 1.5) * max(Z, 0.5)
         d = np.hypot(FGX - px[0], (FGY - py[0]) * 0.8)
-        glow = np.clip(1 - d / (rpx * 2.2), 0, 1)
+        glow = np.clip(1 - d / (rpx * 2.4), 0, 1)
         core = d < rpx
         on = glow > 0.05
         b[on] = np.maximum(b[on], glow[on]); col[on] = np.where(core[on][:, None], PALE, HOT * glow[on][:, None] + col[on] * (1 - glow[on][:, None]))
         gl[core] = CI["@"]; solid[on] = True
+
 
     # ---------- compose
     def lyric_overlay(self, img, t):
@@ -836,6 +872,8 @@ class Film:
         col = np.clip(col * np.clip(0.4 + 0.9 * b, 0, 1)[..., None], 0, 1)
         empty = ~solid & (b < 0.035) & (gl == 0)
         cidx, ccol = self.code_layer(t, fi)
+        pulse = sum(math.exp(-(t - tb) / 0.2) for tb, _ in BEATS if t >= tb)     # the heartbeat lights the room
+        ccol = ccol * (1 + 2.5 * pulse)
         idx = np.where(empty, cidx, idx); col = np.where(empty[..., None], ccol, col)
         g = 1 - float(sstep(29.7, DUR - 0.05, t))
         img = render_fine(idx, col.astype(np.float32) * g)
