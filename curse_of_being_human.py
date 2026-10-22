@@ -3,8 +3,9 @@ The Curse of Being Human  |  9:16, red and black, every frame is text, cut to a 
 One continuous camera, no cuts: each scene turns into the next.
 
 the curse of being human: red code types across the screen and the code is ultron (from a reference),
-his eyes glowing; he leans in toward us, swaying, his head turning and nodding -> yet manufacture chaos: his eyes flare, and from them pixel flames
-(from a reference) spread out over him ->
+written in the scrolling code itself, his eyes glowing; he leans in toward us, swaying, his head turning and
+nodding -> yet manufacture chaos: his eyes flare and catch fire, and the pixel flames (from a reference) spread
+out over him from there, the heat running ahead of a ragged burning edge ->
 they fear death: he burns away in sparks to an x-ray skull with a cassette for a brain (from a reference) ->
 yet waste their lives: the tape unspools, the camera follows it down to money on a string (from a reference) ->
 they demand freedom: the string snaps, the money falls and the camera falls after it, down into a cell
@@ -180,7 +181,7 @@ ULT_EYES = [(243.0, 120.0), (191.0, 156.0)]
 ULT_HEAD = [(165, 100), (178, 80), (200, 66), (236, 60), (258, 68), (278, 86), (300, 88), (300, 130), (170, 130)]
 # "yet manufacture chaos": his eyes flare and the fire spreads out from them
 T_SPREAD = 5.05
-FIRE_O = (460.0, 445.0)                          # between his eyes, on screen
+FIRE_O = [(553.0, 365.0), (353.0, 504.0)]        # his eyes, on screen, when they catch
 # the x-ray: screen px per image px, the head's centre on screen, the reels, where the drawn tape ends
 SKULL_K = [(6.8, 1.2), (7.4, 1.25), (9.2, 1.5), (12.6, 1.5)]
 SKULL_HY = [(6.8, 520), (7.4, 545), (9.2, 860), (12.6, 880)]
@@ -279,8 +280,7 @@ class Film:
         self.prison = np.asarray(Image.open(os.path.join(here, "assets", "eye_bars.png")).convert("L"), np.float32) / 255.0
         self.build_code(rng)
         # the fire eats him from his eyes outward
-        dfire = np.hypot(FGX - FIRE_O[0], (FGY - FIRE_O[1]) * 0.9)
-        self.T_burn = 6.75 + 1.45 * np.clip(dfire / 1500, 0, 1) + 0.35 * (fbm(FGX / 150, FGY / 150, 3, 19) - 0.5)
+        self.T_burn = 6.75 + 1.45 * np.clip(self.fire_dist(FGX, FGY) / 1500, 0, 1) + 0.35 * (fbm(FGX / 150, FGY / 150, 3, 19) - 0.5)
         self.setup_tape()
         self.setup_embers(rng)
         self.setup_prison()
@@ -369,6 +369,11 @@ class Film:
             _, hang = self.tape(tt)
             if hang is not None and hang[1] > 2010:
                 self.t_att = tt; break
+
+    def fire_dist(self, SX, SY):
+        """how far the fire has to go from his eyes to get here: it climbs faster than it falls"""
+        d = [np.hypot(SX - fx, np.where(SY < fy, (SY - fy) * 0.65, SY - fy)) for fx, fy in FIRE_O]
+        return np.minimum.reduce(d)
 
     def setup_embers(self, rng):
         """sparks and ash from burning ultron: start points on him, at the locked camera"""
@@ -505,8 +510,9 @@ class Film:
             fld = sample(self.ult_bg, np.clip(PX, 0, w - 1.01), np.clip(PY, 0, h - 1.01))
             near = sample(self.ult_near, np.clip(PX, 0, w - 1.01), np.clip(PY, 0, h - 1.01))
             fb = np.clip((rgb[..., 0] - 0.05) / 0.8, 0, 1) ** 0.85                  # him: shaded, darks pushed down
-            # the field: a wall of red code that fades out softly around him, so he stands in front of it
-            ub = fld * 0.62 * np.clip((0.5 - near) / 0.38, 0, 1) ** 1.2 + (1 - fld) * fb
+            # he is written in the code too, brighter than the field; the field fades out softly around him
+            fb = np.clip(fb * 1.3, 0, 1) ** 0.9
+            ub = fld * 0.4 * np.clip((0.5 - near) / 0.38, 0, 1) ** 1.2 + (1 - fld) * fb
             white = rgb.min(-1) > 0.55
             ub = np.where(white, 1.0, ub)
             ucol = np.where(white[..., None], PALE, np.where((fld > 0.5)[..., None], RED, redmap(np.minimum(fb * 1.15, 1))))
@@ -530,7 +536,12 @@ class Film:
             fon = on & (fld > 0.5)
             gap = fon & (code == 0)                                                   # spaces in the code stay spaces
             b = np.where(on & ~gap, ub, b); col = np.where(on[..., None], ucol, col)
+            # every cell of him is a letter of the scrolling code; only his darkest shadows and the gaps
+            # between words fall back to plain shading
+            fill = np.where(code > 0, code, np.roll(code, 5, axis=0))               # his gaps take the next line's letters
+            fill = np.where(fill > 0, fill, np.roll(code, 11, axis=1))
             gl = np.where(fon & (code > 0) & (hot < 0.25), code, gl)
+            gl = np.where(on & ~fon & (fill > 0) & (hot < 0.25) & (fb > 0.12), fill, gl)
             solid |= on & ~fon
 
         # the x-ray, revealed where the fire has burnt through; the reels spin, a scan line runs down it
@@ -555,11 +566,20 @@ class Film:
             col = np.where(on[..., None], redmap(bb), col)
             solid |= burnt & (ink > 0.03)
 
-        # fire: from his eyes the pixel flames spread out over him, scrolling up, burn him away, then die
-        if T_SPREAD < t < 9.0:
-            dF = np.hypot(SX - FIRE_O[0], (SY - FIRE_O[1]) * 0.9)
-            R = 2100 * float(smoother(T_SPREAD, T_SPREAD + 1.6, t)) + 170 * (fbm(SX / 260, SY / 260 + t * 0.6, 2, 3) - 0.5)
-            live = (dF < R) & (t < self.T_burn + 0.4)
+        # fire: it catches in his eyes and spreads out over him from there, slowly at first; the heat runs
+        # ahead of it, its edge burns bright, behind the edge the pixel flames fade in, scrolling up
+        if T_SPREAD - 0.1 < t < 9.0:
+            dF = self.fire_dist(SX, SY)
+            nz = fbm(SX / 220, SY / 220 + t * 0.8, 2, 3) - 0.5
+            nz2 = fbm(SX / 70, SY / 70 + t * 2.4, 2, 5) - 0.5                  # a ragged, licking edge
+            R = 2300 * float(smoother(T_SPREAD, T_SPREAD + 2.0, t)) ** 1.5 + 45 * float(sstep(T_SPREAD - 0.1, T_SPREAD + 0.25, t))
+            R = R + (60 + 0.15 * R) * nz + (30 + 0.1 * R) * nz2
+            heat = np.clip(1 - (dF - R) / 280, 0, 1) * (dF > R) * float(t < 7.6)
+            hb = (b > 0.04) & (heat > 0)
+            b = np.where(hb, np.clip(b * (1 + 0.6 * heat), 0, 1), b)
+            col = np.where(hb[..., None], col * (1 - 0.45 * heat[..., None]) + HOT * 0.45 * heat[..., None], col)
+            a = np.clip((R - dF) / 150, 0, 1)
+            live = (a > 0.02) & (t < self.T_burn + 0.4)
             if live.any():
                 fh, fw, _ = self.fire.shape
                 FY = SY / FIRE_K + 250 * float((t - 5.0) / 3.6)
@@ -569,13 +589,21 @@ class Film:
                 hot = np.clip((rgb[..., 1] - 0.22) / 0.35, 0, 1) ** 0.8
                 fb = np.clip((0.8 * rgb[..., 0] + 0.65 * hot) * (0.9 + 0.15 * np.sin(t * 12 + FY / 30)), 0, 1)
                 fade = 1 - sstep(self.T_burn - 0.05, self.T_burn + 0.4, t)
-                dark = live & (rgb[..., 0] < 0.28)
-                fl = live & ~dark
-                b = np.where(fl, np.maximum(fb * fade, b * (1 - fade)), b)
+                dark = rgb[..., 0] < 0.28
+                burn = np.where(dark, b * (1 - fade), np.maximum(fb * fade, b * (1 - fade)))
+                b = np.where(live, b * (1 - a) + burn * a, b)
+                fl = live & ~dark & (a > 0.5)
                 col = np.where(fl[..., None], RED * (1 - hot[..., None]) + HOT * hot[..., None], col)
-                b = np.where(dark, b * (1 - fade), b)
-                gl = np.where(live & (fade > 0.3), 0, gl)
-                solid |= live & (fade > 0.3)
+                gl = np.where(live & (fade > 0.3) & (a > 0.5), 0, gl)
+                solid |= live & (fade > 0.3) & (a > 0.5)
+            # the burning edge: sparks of code
+            edge = np.clip(1 - np.abs(R - dF) / 40, 0, 1) * (R > 30) * (t < 7.6) * np.clip(0.55 + 2.2 * nz2, 0, 1)
+            eg = edge > 0.3
+            if eg.any():
+                rng = np.random.default_rng(fi + 13)
+                gl = np.where(eg, rng.choice(PRINTABLE, (FROWS, FCOLS)), gl)
+                b = np.where(eg, np.maximum(b, 0.55 + 0.45 * edge), b)
+                col = np.where(eg[..., None], np.where((edge > 0.75)[..., None], PALE, HOT), col); solid |= eg
             ember = (t > self.T_burn - 0.12) & (t < self.T_burn + 0.06)
             if ember.any():
                 rng = np.random.default_rng(fi + 3)
