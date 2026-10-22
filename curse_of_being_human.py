@@ -3,15 +3,16 @@ The Curse of Being Human  |  9:16, red and black, every frame is text, cut to a 
 One continuous camera, no cuts: each scene turns into the next.
 
 the curse of being human: red code types across the screen and the code is ultron (from a reference),
-who speaks the lines: his jaw and eyes move with the voice, his head moves a little ->
+his eyes glowing, his head turning slowly ->
 yet manufacture chaos: pixel flames (from a reference) climb over it ->
 they fear death: he burns away in sparks to an x-ray skull with a cassette for a brain (from a reference) ->
 yet waste their lives: the tape unspools, the camera follows it down to money on a string (from a reference) ->
 they demand freedom: the string snaps, the money falls and the camera falls after it, down into a cell
 (from a reference photo) -> then construct their: the hands rattle the bars ->
 own prisons: pull back, the prison is inside an eye -> perhaps the greatest flaw in your design: the eye is
-one of a wall of eyes, all turning to look at you -> is not your mortality: they all close -> it is your extraordinary ability: they give way to two hands
-holding a closed ring box (from a reference) -> to remain alive: on the hit the hand's fingers lift the lid, an Esc key
+one of a wall of eyes darting about, blinking, then all turning to look at you -> is not your mortality: they look
+away again -> it is your extraordinary ability: they all close and give way to two hands holding a closed ring box
+(from a reference) -> to remain alive: on the hit the hand's fingers lift the lid, an Esc key
 inside, its light pulsing with the heart -> without ever truly living: Esc is pressed, the screen switches off.
 
 Export:   python curse_of_being_human.py --music voice.mp4 --export curse.mp4
@@ -169,9 +170,9 @@ def lids(xl, op):
 # the head is already moving at the first frame: it drifts in from up and to the left, tilted, and
 # settles into its pose by "Humans pursue peace"
 # ultron (reference image), on a locked camera: screen px per image px, the image px at the screen's centre,
-# the neck his head turns on, his jaw, his mouth, his eyes
+# the neck his head turns on, his eyes
 ULT_K, ULT_C = 3.5, (240.0, 285.0)
-ULT_NECK, ULT_JAW, ULT_MOUTH = (262.0, 245.0), (212.0, 206.0), (222.0, 184.0)
+ULT_NECK = (262.0, 245.0)
 ULT_EYES = [(243.0, 120.0), (191.0, 156.0)]
 # the x-ray: screen px per image px, the head's centre on screen, the reels, where the drawn tape ends
 SKULL_K = [(6.8, 1.2), (7.4, 1.25), (9.2, 1.5), (12.6, 1.5)]
@@ -203,14 +204,14 @@ def sample(img, PX, PY):
 EU = 330.0
 LOGZ = [(12.6, math.log(3.5)), (13.4, math.log(3.75)), (14.3, math.log(3.95)), (15.4, math.log(1.9)),
         (16.7, math.log(1.0)), (17.6, math.log(0.5)), (18.8, math.log(0.36)), (20.0, math.log(0.33)),
-        (21.5, math.log(0.31)), (22.5, math.log(0.38)), (23.6, math.log(0.98)), (24.6, math.log(1.06)),
-        (25.3, math.log(1.1)), (26.5, math.log(1.25)), (27.8, math.log(1.2)), (30.55, math.log(1.2))]
+        (21.5, math.log(0.31)), (22.6, math.log(0.34)), (23.4, math.log(0.45)), (24.3, math.log(0.98)),
+        (25.4, math.log(1.06)), (26.5, math.log(1.25)), (27.8, math.log(1.2)), (30.55, math.log(1.2))]
 CX = [(12.6, 0.3), (14.4, 0.4), (16.0, 0.14), (17.6, 0.0), (19.0, 0.8), (20.5, 0.3), (21.8, -0.6),
-      (22.6, -0.2), (23.6, 0.3), (25.0, 0.32)]
+      (22.8, -0.3), (24.3, 0.05), (25.4, 0.06)]
 CY = [(12.6, 1.3), (12.9, 0.95), (13.3, 0.3), (13.8, 0.03), (14.4, 0.09), (16.0, 0.04), (17.6, 0.2), (19.0, 0.9), (20.5, -0.4), (21.8, -0.9),
-      (22.6, -0.75), (23.6, -0.95), (25.0, -0.85)]
+      (22.8, -0.6), (24.3, 0.02), (25.4, 0.04)]
 ROLLB = [(12.6, 0), (13.6, 0.025), (14.6, -0.02), (16.0, 0.04), (17.6, 0.1), (19.5, -0.06), (21.0, 0.08), (22.6, 0.02),
-         (23.6, 0.0), (30.55, 0.0)]
+         (24.3, 0.0), (30.55, 0.0)]
 # the eye with bars (reference photo): photo px per eye unit, the photo px at the eye's centre
 PRI_U, PRI_E = 400.0, (690.0, 774.0)
 PRI_BAR = 0.3                                    # its middle bar, in eye units
@@ -223,20 +224,20 @@ LID_X, BASE_X = (372, 612), (368, 630)
 KEY_BOX, KEY_C = (395, 600, 505, 645), (497, 560)
 T_OPEN, T_PRESS, T_OFF = 26.45, 29.0, 29.12      # the lid opens on the hit; Esc is pressed; the screen goes off
 LID_T = 0.95                                     # how long the lid takes to open
-FING_X, FING_Y, FING_TIP = (372, 580), 292, 252  # the two fingers on the lid: their strip, its bottom, their tips
-BOXCAM_X = [(22.6, 500), (24.5, 498), (26.3, 497), (27.4, 496), (28.4, 494), (28.95, 497), (30.55, 497)]
-BOXCAM_Y = [(22.6, 722), (24.5, 714), (26.3, 706), (27.4, 600), (28.4, 525), (28.95, 548), (30.55, 552)]
-BOXCAM_Z = [(22.6, math.log(4.3)), (24.5, math.log(4.0)), (26.3, math.log(3.8)), (27.4, math.log(2.45)),
+FING_TIP = 252                                   # the two fingers on the lid: where their tips rest, and their outline
+FING_POLY = [(262, 30), (520, 30), (578, 180), (578, 296), (372, 302), (282, 135), (264, 75)]
+BOXCAM_X = [(24.0, 500), (25.2, 498), (26.3, 497), (27.4, 496), (28.4, 494), (28.95, 497), (30.55, 497)]
+BOXCAM_Y = [(24.0, 760), (25.2, 752), (26.3, 744), (27.4, 600), (28.4, 525), (28.95, 548), (30.55, 552)]
+BOXCAM_Z = [(24.0, math.log(4.3)), (25.2, math.log(4.0)), (26.3, math.log(3.8)), (27.4, math.log(2.45)),
             (28.4, math.log(1.45)), (28.95, math.log(1.7)), (30.55, math.log(1.8))]
 
 
 class Film:
-    def __init__(self, handle="@rony_matar", lyrics=True, seed=5, voice=None):
+    def __init__(self, handle="@rony_matar", lyrics=True, seed=5):
         rng = np.random.default_rng(seed)
         self.handle, self.lyrics = handle, lyrics
         self.rand = rng.random((FROWS, FCOLS))
         here = os.path.dirname(os.path.abspath(__file__))
-        self.voice = voice
         self.ultron = np.asarray(Image.open(os.path.join(here, "assets", "ultron.png")).convert("RGB"), np.float32) / 255.0
         # the flat red field behind him (flood filled from the edges), so the code can be the field and he can be shaded
         u = self.ultron
@@ -297,11 +298,6 @@ class Film:
         return np.where(on, idx, 0), col.astype(np.float32)
 
     # ---------- scene A: bust, fire, x-ray, tape, money
-    def voice_at(self, t):
-        """how loud the voice is at t, 0..1 (from the track; silent without one)"""
-        if self.voice is None: return 0.0
-        return float(np.interp(t * FPS, np.arange(len(self.voice)), self.voice))
-
     def bust_sample(self, img, PX, PY):
         h, w = img.shape
         ok = (PX >= 0) & (PX < w - 1) & (PY >= 0) & (PY < h - 1)
@@ -458,21 +454,19 @@ class Film:
         hm = 1 - float(smoother(6.5, 7.6, t))
         burnt = t >= self.T_burn
 
-        # ultron, speaking: the code types him in, his jaw and eyes move with the voice, his head moves a little
+        # ultron: the code types him in; his eyes glow, his head turns slowly, looking about, like a man's would
         if t < 8.9:
-            v = self.voice_at(t)
             PX = ULT_C[0] + (SX - 540) / ULT_K
             PY = ULT_C[1] + (SY - 960) / ULT_K
-            hw = np.clip((255 - PY) / 45, 0, 1) * np.clip((330 - PX) / 50, 0, 1)      # the head, not the body
-            tilt = hm * (0.03 * math.sin(t * 0.9 + 1.0) + 0.01 * math.sin(t * 2.1)) + 0.012 * v
+            hw = np.clip((255 - PY) / 45, 0, 1) * np.clip((350 - PX) / 40, 0, 1)      # the head, not the body
+            tilt = hm * (0.05 * math.sin(t * 0.8 + 1.0) + 0.02 * math.sin(t * 1.7 + 0.4))
             ang = -tilt * hw
             qx, qy = PX - ULT_NECK[0], PY - ULT_NECK[1]
             PX = ULT_NECK[0] + qx * np.cos(ang) - qy * np.sin(ang)
             PY = ULT_NECK[1] + qx * np.sin(ang) + qy * np.cos(ang)
+            PX = PX - hm * hw * 3.0 * math.sin(t * 0.45 + 2.0)                     # a slow turn and nod
+            PY = PY - hm * hw * 3.5 * math.sin(t * 0.8 + 0.5)
             PY = PY - hm * 1.5 * math.sin(t * 1.2) * (1 - hw)                     # breathing
-            jaw = np.exp(-(((PX - ULT_JAW[0]) / 48) ** 2 + ((PY - ULT_JAW[1]) / 26) ** 2)) * \
-                (PY > ULT_MOUTH[1] - 0.25 * (PX - ULT_MOUTH[0]))
-            PY = PY - 5.5 * v * jaw                                                # the jaw drops as he speaks
             h, w = self.ultron.shape[:2]
             rgb = sample(self.ultron, np.clip(PX, 0, w - 1.01), np.clip(PY, 0, h - 1.01))
             fld = sample(self.ult_bg, np.clip(PX, 0, w - 1.01), np.clip(PY, 0, h - 1.01))
@@ -481,11 +475,9 @@ class Film:
             white = rgb.min(-1) > 0.55
             ub = np.where(white, 1.0, ub)
             ucol = np.where(white[..., None], PALE, np.where((fld > 0.5)[..., None], RED, redmap(np.minimum(fb * 1.15, 1))))
-            mouth = v * np.exp(-(((PX - ULT_MOUTH[0]) / 26) ** 2 + ((PY - ULT_MOUTH[1]) / 3.5) ** 2))
-            eyes = sum(np.exp(-np.hypot(PX - ex, PY - ey) / 6.0) for ex, ey in ULT_EYES) * (0.85 + 0.6 * v)
-            hot = np.maximum(mouth, eyes)
+            hot = sum(np.exp(-np.hypot(PX - ex, PY - ey) / 6.0) for ex, ey in ULT_EYES) * (1.1 + 0.2 * math.sin(t * 2.2))
             ub = np.maximum(ub, np.clip(hot, 0, 1))
-            ucol = np.where((hot > 0.25)[..., None], np.where((eyes > mouth)[..., None], PALE, HOT), ucol)
+            ucol = np.where((hot > 0.25)[..., None], PALE, ucol)
             # typed in with the code: a cell shows him once its line of code has reached it
             ci = (np.arange(FCOLS)[None, :] + np.floor(self.code_v * t).astype(int)[:, None]) % FCOLS
             seen = t >= np.take_along_axis(self.code_tf, ci, 1)
@@ -591,9 +583,14 @@ class Film:
         self.eyes = eyes
         dist = np.array([math.hypot(x, y) for x, y, _, _ in eyes])
         self.eye_open = 16.85 + 0.05 * dist
-        self.eye_close = 20.05 + 0.9 * (1 - dist / dist.max())
+        self.eye_close = 22.85 + 0.9 * (1 - dist / dist.max())           # outside in, the hero eye last
         self.eye_ph = rng.uniform(0, 6.3, len(eyes))
-        self.eye_blink = rng.uniform(18.3, 19.8, len(eyes))
+        # where each eye looks: a new spot every so often, reached in a quick jump, like real eyes do
+        self.gaze = []
+        for _ in eyes:
+            ts = np.cumsum(rng.uniform(0.3, 1.0, 40)) + 16.0
+            self.gaze.append((ts, rng.uniform(-1, 1, (40, 2)) * [0.3, 0.12]))
+        self.eye_blinks = [16.9 + rng.uniform(0, 2.0) + np.cumsum(rng.uniform(1.3, 3.0, 6)) for _ in eyes]
 
     def cam_b(self, t):
         Z = math.exp(ckey(t, LOGZ))
@@ -612,6 +609,15 @@ class Film:
         cr, sr = math.cos(r), math.sin(r)
         return 540 + rx * cr - ry * sr, 960 + rx * sr + ry * cr
 
+    def gaze_at(self, i, t):
+        """where eye i looks at t: it holds a spot, then jumps to the next one in a quick saccade"""
+        ts, pts = self.gaze[i]
+        k = int(np.searchsorted(ts, t))                  # the last jump was at ts[k - 1], to pts[k - 1]
+        if k == 0: return pts[0]
+        f = min((t - ts[k - 1]) / 0.07, 1.0)
+        a = pts[max(k - 2, 0)]
+        return a + (pts[k - 1] - a) * f * f * (3 - 2 * f)
+
     def hero_open(self, t):
         return 1 - float(smoother(self.eye_close[0], self.eye_close[0] + 0.2, t))
 
@@ -625,13 +631,6 @@ class Film:
             gx_ = 2.5 * math.sin(t * 2.3 + ph) + 1.5 * math.sin(t * 5.1 + ph)
             gy_ = 4.0 * math.sin(t * 1.6 + ph * 0.7) + 2.0 * math.sin(t * 3.7 + ph)
             PXp = PXp - gx_ * bump; PYp = PYp - gy_ * bump
-        # the eye blinks once it's revealed: the upper lid's skin slides down over it
-        bl = math.exp(-((t - 15.75) / 0.09) ** 2)
-        if bl > 0.01:
-            _, y_low, y_up = lids(X, 1.0)
-            y_cl = y_up - (y_up - y_low) * bl
-            cov = (np.abs(X) < EX) & (Y < y_up + 0.05) & (Y > y_cl)
-            PYp = np.where(cov, PYp - (y_up + 0.05 - y_cl) * PRI_U, PYp)
         a = t - 14.0
         if 0 <= a < 0.9:
             cell = (np.abs(X - 0.3) < 0.62) & (Y > -0.5) & (Y < 0.6)
@@ -758,11 +757,15 @@ class Film:
         cam = self.cam_b(t)
         X, Y = self.to_eye(SX, SY, cam)
         Z = cam[2]
-        if 14.4 <= t < 24.3:
+        if 14.4 <= t < 25.4:
             b, folds = self.flesh(X, Y, t, Z)
             col = redmap(b); gl = np.zeros(shape, np.int64); solid = folds | (b > 0.03)
-            look = float(smoother(17.9, 18.02, t))                      # "flaw in your design": they all look at you
+            # "flaw in your design": they all snap to look at you; "is not your mortality": they look away again
+            look = float(smoother(17.9, 18.0, t)) * (1 - float(smoother(19.9, 20.05, t)))
             for i, (ex, ey, es, er) in enumerate(self.eyes):
+                ph = self.eye_ph[i]
+                ex = ex + 0.06 * math.sin(t * 0.9 + ph); ey = ey + 0.04 * math.sin(t * 0.7 + 2 * ph)   # the skin breathes
+                er = er + 0.04 * math.sin(t * 0.6 + 3 * ph)
                 pxc, pyc = self.from_eye(np.array([ex]), np.array([ey]), cam)
                 rad = 1.9 * es * EU * Z
                 r0, r1 = int((pyc[0] - rad - FOY) / FCH), int((pyc[0] + rad - FOY) / FCH) + 2
@@ -781,13 +784,13 @@ class Film:
                     gx = 0.04 * math.sin(t * 0.6); gy = 0.02 * math.sin(t * 0.8)
                 else:
                     op = float(smoother(self.eye_open[i], self.eye_open[i] + 0.25, t)) * (1 - float(smoother(self.eye_close[i], self.eye_close[i] + 0.2, t)))
-                    blink = math.exp(-((t - self.eye_blink[i]) / 0.06) ** 2)
-                    op *= 1 - blink
-                    ph = self.eye_ph[i]
-                    gx = (0.12 * math.sin(t * 0.7 + ph) + 0.05 * (math.sin(t * 3.1 + ph) > 0.7)) * (1 - look)
-                    gy = 0.05 * math.sin(t * 0.5 + 2 * ph) * (1 - look)
+                    blink = max(math.exp(-((t - tb) / 0.06) ** 2) for tb in self.eye_blinks[i])
+                    op *= (1 - blink) * (0.9 + 0.1 * math.sin(t * 1.1 + ph))           # they squint and widen
+                    g = self.gaze_at(i, t)
+                    gx = g[0] * (1 - look) + 0.012 * math.sin(t * 9 + ph)
+                    gy = g[1] * (1 - look) + 0.008 * math.sin(t * 7 + ph)
                 eb, ec, eg, es_, reg = self.paint_eye(xl, yl, op, gx, gy, t, self.rand[sl])
-                if i == 0 and t < 22.5:                           # inside the hero eye: the cell from the photo
+                if i == 0:                                        # inside the hero eye: the cell from the photo
                     inside_h = (np.abs(xl) < EX) & (yl > lids(xl, op)[1]) & (yl < lids(xl, op)[2])
                     if inside_h.any():
                         cb, _ = self.prison_photo(X[sl], Y[sl], t)
@@ -815,9 +818,9 @@ class Film:
             gl = np.where(m > 0.5, pg, gl); solid = np.where(m > 0.5, ps, solid)
 
         # the wall of closed eyes gives way, in code, to hands holding a closed ring box
-        if t > 22.6:
+        if t > 24.0:
             rb, rc, rg, rsolid = self.box_scene(SX, SY, t)
-            sw = 22.85 + 0.8 * np.clip(np.hypot(SX - 540, (SY - 960) * 1.2) / 1100, 0, 1) + 0.25 * self.rand
+            sw = 24.15 + 0.8 * np.clip(np.hypot(SX - 540, (SY - 960) * 1.2) / 1100, 0, 1) + 0.25 * self.rand
             on = t >= sw
             b = np.where(on, rb, b); col = np.where(on[..., None], rc, col)
             gl = np.where(on, rg, gl); solid = np.where(on, rsolid, solid)
@@ -835,19 +838,25 @@ class Film:
         h, w = img.shape[:2]
         mx, mn = img.max(-1), img.min(-1)
         red = (mx - mn) > 0.2
-        # the two fingers that hold the lid: skin in a strip above the lid, with their outlines
+        # the two fingers that hold the lid, whole, with their outlines
         yy, xx = np.mgrid[0:h, 0:w]
-        strip = (xx > FING_X[0]) & (xx < FING_X[1]) & (yy < FING_Y)
+        pm = Image.new("L", (w, h), 0)
+        ImageDraw.Draw(pm).polygon(FING_POLY, fill=255)
+        strip = np.asarray(pm) > 127
         skin = strip & ~red & (img.mean(-1) > 0.26)
         m = Image.fromarray((skin * 255).astype(np.uint8)).filter(ImageFilter.MaxFilter(7)).filter(ImageFilter.MinFilter(3))
         fing = (np.asarray(m) > 127) & strip & ~red
         self.fing = fing.astype(np.float32)
-        # the plate: the open lid and the fingers painted out (dark, a little grain), so both can move
+        # the plate: the open lid and the fingers taken out, and the dark backdrop of the picture (its grain,
+        # mirrored from an empty corner) put where they were, so both can move
         plate = img.copy()
-        rng = np.random.default_rng(3)
         lidreg = (xx > LID_X[0] - 6) & (xx < LID_X[1] + 6) & (yy > LID_TOP - 4) & (yy < HINGE + 3) & red
         hole = lidreg | fing
-        plate[hole] = (0.1 + 0.04 * rng.random(int(hole.sum())))[:, None]
+        tex = img[0:270, 690:960]
+        th, tw = tex.shape[:2]
+        ty = yy % (2 * th); ty = np.where(ty >= th, 2 * th - 1 - ty, ty)
+        tx = xx % (2 * tw); tx = np.where(tx >= tw, 2 * tw - 1 - tx, tx)
+        plate[hole] = tex[ty[hole], tx[hole]]
         self.box_plate = plate
 
     def box_cam(self, t):
@@ -901,10 +910,10 @@ class Film:
         # the two fingers ride the lid's edge: they rest on the closed lid, lift it, hold it open
         dfin = max(ye - FING_TIP, 0.0) + 7 * math.exp(-((t - T_OPEN + 0.12) / 0.1) ** 2)
         FY = AY - dfin
-        fm = sample(self.fing, AX, np.clip(FY, 0, None)) > 0.5
-        if fm.any():
-            fr = sample(self.box_img, AX, np.clip(FY, 0, None))
-            rgb = np.where(fm[..., None], fr, rgb)
+        fa = sample(self.fing, AX, FY)
+        if (fa > 0.5).any():
+            fa = np.where(fa > 0.5, 1.0, 0.0) * (1 - (dfin > 1) * (1 - sstep(30, 120, FY)))   # lowered, they come out of the dark
+            rgb = rgb * (1 - fa[..., None]) + sample(self.box_img, AX, FY) * fa[..., None]
         # light spills out of the opened box and pulses with the heart
         pulse = sum(math.exp(-(t - tb) / 0.22) for tb, _ in BEATS if t >= tb)
         d = np.hypot(AX - KEY_C[0], (AY - KEY_C[1]) * 1.3)
@@ -992,26 +1001,8 @@ class Film:
         return self.lyric_overlay(img, t)
 
 
-def voice_envelope(music):
-    """loudness of the voice per video frame, 0..1, for ultron's mouth"""
-    if not music: return None
-    sr = 16000
-    raw = subprocess.run([ffmpeg_bin(), "-v", "error", "-i", music, "-vn", "-ac", "1", "-ar", str(sr), "-f", "s16le", "-"],
-                         capture_output=True, check=True).stdout
-    x = np.frombuffer(raw, np.int16).astype(np.float32) / 32768
-    n = int(len(x) / sr * FPS)
-    hop = sr / FPS
-    # the voice band, frame by frame
-    rms = np.array([np.sqrt(np.mean(x[int(i * hop):int((i + 1) * hop) + 1] ** 2)) for i in range(n)])
-    env = np.clip((rms - np.percentile(rms, 30)) / (np.percentile(rms, 97) - np.percentile(rms, 30) + 1e-6), 0, 1)
-    out = np.zeros_like(env); a = 0.0
-    for i, e in enumerate(env):                                   # quick to open, slower to close
-        a = e if e > a else a + (e - a) * 0.45
-        out[i] = a
-    return out
-
 def export(path, music, handle, lyrics):
-    film = Film(handle, lyrics, voice=voice_envelope(music))
+    film = Film(handle, lyrics)
     ff = ffmpeg_bin()
     cmd = [ff, "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W}x{H}",
            "-r", str(FPS), "-i", "-"]
