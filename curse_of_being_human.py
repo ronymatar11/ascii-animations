@@ -3,8 +3,7 @@ The Curse of Being Human  |  9:16, red and black, every frame is text, cut to a 
 One continuous camera, no cuts: each scene turns into the next.
 
 the curse of being human: red code types across the screen and the code is ultron (from a reference),
-his eyes glowing, his head turning slowly -> humans pursue peace: his hand (a robot hand, drawn in code) comes
-up holding a match and strikes it; the flame lights his face -> yet manufacture chaos: from the match pixel flames
+his eyes glowing, his head turning slowly -> yet manufacture chaos: his eyes flare, and from them pixel flames
 (from a reference) spread out over him ->
 they fear death: he burns away in sparks to an x-ray skull with a cassette for a brain (from a reference) ->
 yet waste their lives: the tape unspools, the camera follows it down to money on a string (from a reference) ->
@@ -12,9 +11,11 @@ they demand freedom: the string snaps, the money falls and the camera falls afte
 (from a reference photo) -> then construct their: the hands rattle the bars ->
 own prisons: pull back, the prison is inside an eye -> perhaps the greatest flaw in your design: the eye is
 one of a wall of eyes darting about, blinking, then all turning to look at you -> is not your mortality: they look
-away again -> it is your extraordinary ability: they all close, the camera sinks into the skin between them,
-the skin becomes the skin of a hand, and pulling back, two hands hold a closed ring box (from a reference) ->
-to remain alive: on the hit the hand's fingers lift the lid, an Esc key inside, its light pulsing with the heart -> without ever truly living: Esc is pressed, the screen switches off.
+away again -> it is your extraordinary ability: they close, the camera comes back to the eye with the prison in it
+and it closes too; its lid line becomes the seam of a closed ring box (from a reference), and pulling back, two
+hands hold the box -> to remain alive: the fingers come down on the lid and on the hit lift it, the box opening
+like the eye did, an Esc key inside, its light pulsing with the heart -> without ever truly living: it is never
+pressed; the hands and the box go dark, the key's light last.
 
 Export:   python curse_of_being_human.py --music voice.mp4 --export curse.mp4
 """
@@ -147,43 +148,6 @@ def _rbox2(x, y, hx, hy, r):
     qx, qy = np.abs(x) - hx + r, np.abs(y) - hy + r
     return np.hypot(np.maximum(qx, 0), np.maximum(qy, 0)) + np.minimum(np.maximum(qx, qy), 0) - r
 
-def _chain(x, y, z, pts, rs):
-    """a robot finger: each phalanx a capsule stopping short of the joints, a smaller ball in each joint"""
-    d = np.full(x.shape, 1e9)
-    n = len(pts) - 1
-    for k in range(n):
-        a, b = np.array(pts[k], float), np.array(pts[k + 1], float)
-        a2 = a + (b - a) * 0.12
-        b2 = b - (b - a) * (0.12 if k < n - 1 else 0.0)
-        d = np.minimum(d, _cap(x, y, z, a2, b2, rs[k], rs[k + 1]))
-        d = np.minimum(d, np.sqrt((x - a[0]) ** 2 + (y - a[1]) ** 2 + (z - a[2]) ** 2) - rs[k] * 0.8)
-    return d
-
-def _rbox3(x, y, z, c, h, r, ang=0.0):
-    """a rounded box at c with half sizes h, turned by ang in the picture plane"""
-    dx, dy = x - c[0], y - c[1]
-    ca, sa = math.cos(ang), math.sin(ang)
-    qx = np.abs(dx * ca + dy * sa) - h[0] + r
-    qy = np.abs(-dx * sa + dy * ca) - h[1] + r
-    qz = np.abs(z - c[2]) - h[2] + r
-    out = np.sqrt(np.maximum(qx, 0) ** 2 + np.maximum(qy, 0) ** 2 + np.maximum(qz, 0) ** 2)
-    return out + np.minimum(np.maximum(qx, np.maximum(qy, qz)), 0) - r
-
-def hand_sdf(x, y, z):
-    d = np.minimum(_chain(x, y, z, *H_INDEX), _chain(x, y, z, *H_THUMB))
-    for pts, rs in H_UP:
-        d = np.minimum(d, _chain(x, y, z, pts, rs))
-    px, py, pz = H_PALM
-    palm = _rbox3(x, y, z, (px, py, pz), (46, 52, 15), 14)                   # the palm, a plate
-    pad = _rbox3(x, y, z, (px - 10, py + 32, pz + 4), (26, 20, 13), 12)     # the heel of the thumb
-    wrist = _cap(x, y, z, (px, py + 50, pz - 4), (px + 4, py + 100, pz - 6), 34, 37)
-    arm = _rbox3(x, y, z, (px + 12, py + 280, pz - 8), (52, 190, 36), 22, -0.05)   # an armoured forearm
-    return np.minimum(d, smin(smin(np.minimum(palm, pad), wrist, 10), arm, 8))
-
-def match_sdf(x, y, z):
-    return np.minimum(_cap(x, y, z, (1.5, 14, 0), (-6.5, -53, 0), 3.0),
-                      _ell(x - MATCH_HEAD[0], y - MATCH_HEAD[1], z, 5.0, 6.8, 5.0))
-
 def splat(idx, col, solid, X, Y, color, b=None, bright=0.9, glyph=None):
     """draw a polyline (screen px) into the fine grid as strokes (or one glyph)"""
     if len(X) < 2: return
@@ -213,23 +177,9 @@ ULT_K, ULT_C = 3.5, (240.0, 285.0)
 ULT_NECK = (262.0, 245.0)
 ULT_EYES = [(243.0, 120.0), (191.0, 156.0)]
 ULT_HEAD = [(165, 100), (178, 80), (200, 66), (236, 60), (258, 68), (278, 86), (300, 88), (300, 130), (170, 130)]
-# his hand comes up with a match and strikes it; the fire spreads out from its flame
-MATCH_G = (520.0, 1000.0)                        # where his fingers pinch the match, on screen, once the hand is up
-HAND_S = 3.3                                     # screen px per hand unit: his hands are big, the size of his face
-MATCH_HEAD = (-7.0, -58.0)                       # the match head, in hand units
-T_UP, T_LIGHT, T_SPREAD = (3.1, 4.25), 4.45, 5.05
-FIRE_O = (686.0, 840.0)                          # the flame, where the fire spreads from
-# the hand, palm toward us (units: px / HAND_S; x right, y down, z toward us; the pinch is the origin): thumb and
-# index meet in a ring around the match, the other three fingers stand up; finger joints and radii
-_P0 = (-8.0, -4.0, 27.0)
-def _hp(*pts):
-    return [(x - _P0[0], y - _P0[1], z - _P0[2]) for x, y, z in pts]
-H_INDEX = _hp((22, 26, 0), (12, -8, 10), (0, -20, 22), (-8, -6, 27)), [14, 13, 12, 10.5]
-H_THUMB = _hp((18, 105, 6), (-4, 70, 18), (-14, 34, 26), (-8, -1, 28)), [18, 16, 14, 12]
-H_UP = [(_hp((48, 20, 0), (50, -22, 5), (51, -50, 9), (52, -71, 11)), [14, 13, 12, 10.5]),
-        (_hp((74, 22, 0), (79, -16, 4), (83, -42, 7), (86, -61, 9)), [13.5, 12.5, 11.5, 10]),
-        (_hp((96, 32, 0), (104, 4, 3), (109, -16, 5), (113, -32, 6)), [12, 11, 10, 9])]
-H_PALM = _hp((55, 72, 0))[0]
+# "yet manufacture chaos": his eyes flare and the fire spreads out from them
+T_SPREAD = 5.05
+FIRE_O = (460.0, 445.0)                          # between his eyes, on screen
 # the x-ray: screen px per image px, the head's centre on screen, the reels, where the drawn tape ends
 SKULL_K = [(6.8, 1.2), (7.4, 1.25), (9.2, 1.5), (12.6, 1.5)]
 SKULL_HY = [(6.8, 520), (7.4, 545), (9.2, 860), (12.6, 880)]
@@ -260,34 +210,35 @@ def sample(img, PX, PY):
 EU = 330.0
 LOGZ = [(12.6, math.log(3.5)), (13.4, math.log(3.75)), (14.3, math.log(3.95)), (15.4, math.log(1.9)),
         (16.7, math.log(1.0)), (17.6, math.log(0.5)), (18.8, math.log(0.36)), (20.0, math.log(0.33)),
-        (21.5, math.log(0.31)), (22.6, math.log(0.34)), (23.3, math.log(0.45)), (24.0, math.log(1.5)),
-        (24.6, math.log(2.1)), (25.2, math.log(2.3))]
+        (21.5, math.log(0.31)), (22.6, math.log(0.34)), (23.3, math.log(0.62)), (24.0, math.log(1.75)),
+        (24.45, math.log(2.3)), (24.85, math.log(2.38))]
 CX = [(12.6, 0.3), (14.4, 0.4), (16.0, 0.14), (17.6, 0.0), (19.0, 0.8), (20.5, 0.3), (21.8, -0.6),
-      (22.8, -0.1), (23.8, 0.5), (24.6, 0.6), (25.2, 0.61)]
+      (22.8, -0.35), (23.6, -0.03), (24.2, 0.0), (24.85, 0.0)]
 CY = [(12.6, 1.3), (12.9, 0.95), (13.3, 0.3), (13.8, 0.03), (14.4, 0.09), (16.0, 0.04), (17.6, 0.2), (19.0, 0.9), (20.5, -0.4), (21.8, -0.9),
-      (22.8, -1.5), (23.8, -2.75), (24.6, -2.9), (25.2, -2.92)]
+      (22.8, -0.6), (23.6, 0.0), (24.0, 0.06), (24.4, -0.38), (24.85, -0.43)]
 ROLLB = [(12.6, 0), (13.6, 0.025), (14.6, -0.02), (16.0, 0.04), (17.6, 0.1), (19.5, -0.06), (21.0, 0.08), (22.6, 0.02),
-         (24.3, 0.0), (30.55, 0.0)]
+         (23.6, 0.0), (30.55, 0.0)]
 # the eye with bars (reference photo): photo px per eye unit, the photo px at the eye's centre
 PRI_U, PRI_E = 400.0, (690.0, 774.0)
 PRI_BAR = 0.3                                    # its middle bar, in eye units
 T_REVEAL = 12.72                                 # the camera reaches the cell: dust starts to show in its light
-# the bust comes back at the end: bust photo px per eye unit, and the px of its left eye (where it cries)
 BEATS = [(26.5, 0.8), (27.45, 0.48)]             # heart hits: the box's light pulses
 # the ring box (reference image px): lid hinge, how deep it lies closed, how tall it stands open, its sides
 HINGE, LID_D, LID_H, LID_TOP = 510, 135, 280, 230
 LID_X, BASE_X = (372, 612), (368, 630)
 KEY_BOX, KEY_C = (395, 600, 505, 645), (497, 560)
-T_OPEN, T_PRESS, T_OFF = 26.45, 29.0, 29.12      # the lid opens on the hit; Esc is pressed; the screen goes off
+T_OPEN = 26.45                                   # the lid opens on the hit
+T_FADE = (29.55, 30.15, 30.5)                    # the end: the picture goes dark, the Esc key's light last
 LID_T = 0.95                                     # how long the lid takes to open
 FING_TIP = 252                                   # the two fingers on the lid: where their tips rest, and their outline
 FING_POLY = [(262, 30), (520, 30), (578, 180), (578, 296), (372, 302), (282, 135), (264, 75)]
-# it starts close on the skin of the hand under the box, then pulls back to the hands holding the box
-SKIN = (24.45, 24.95)                            # the skin between the eyes becomes the skin of the hand
-BOXCAM_X = [(24.45, 468), (24.95, 469), (25.6, 482), (26.3, 497), (27.4, 496), (28.4, 494), (28.95, 497), (30.55, 497)]
-BOXCAM_Y = [(24.45, 832), (24.95, 831), (25.6, 800), (26.3, 744), (27.4, 600), (28.4, 525), (28.95, 548), (30.55, 552)]
-BOXCAM_Z = [(24.45, math.log(12.0)), (24.95, math.log(13.5)), (25.6, math.log(8.0)), (26.3, math.log(3.8)), (27.4, math.log(2.45)),
-            (28.4, math.log(1.45)), (28.95, math.log(1.7)), (30.55, math.log(1.8))]
+# the match cut: the last eye closes, its lid line becomes the seam of the closed box (bent like the lid at
+# first, then straight), the camera pulls back to the hands holding it; it opens like the eye did
+MCUT = (24.45, 24.85)
+BOXCAM_X = [(24.45, 499), (24.85, 499), (25.6, 498), (26.3, 497), (27.4, 496), (28.4, 494), (30.55, 497)]
+BOXCAM_Y = [(24.45, 645), (24.85, 646), (25.6, 700), (26.3, 744), (27.4, 600), (28.4, 525), (29.5, 545), (30.55, 565)]
+BOXCAM_Z = [(24.45, math.log(6.9)), (24.85, math.log(6.95)), (25.6, math.log(4.9)), (26.3, math.log(3.8)), (27.4, math.log(2.45)),
+            (28.4, math.log(1.45)), (29.5, math.log(1.75)), (30.55, math.log(2.2))]
 
 
 class Film:
@@ -315,12 +266,9 @@ class Film:
         self.money = np.asarray(Image.open(os.path.join(here, "assets", "money.png")).convert("RGBA"), np.float32) / 255.0
         self.prison = np.asarray(Image.open(os.path.join(here, "assets", "eye_bars.png")).convert("L"), np.float32) / 255.0
         self.build_code(rng)
-        # the fire eats him from the match outward
+        # the fire eats him from his eyes outward
         dfire = np.hypot(FGX - FIRE_O[0], (FGY - FIRE_O[1]) * 0.9)
         self.T_burn = 6.75 + 1.45 * np.clip(dfire / 1500, 0, 1) + 0.35 * (fbm(FGX / 150, FGY / 150, 3, 19) - 0.5)
-        sr = np.random.default_rng(41)
-        self.sparks = dict(v=sr.uniform(250, 800, 30), a=sr.uniform(-math.pi * 0.95, -math.pi * 0.05, 30),
-                           life=sr.uniform(0.2, 0.55, 30))
         self.setup_tape()
         self.setup_embers(rng)
         self.setup_prison()
@@ -511,114 +459,6 @@ class Film:
         if tau <= 0: return 0.0
         return 120 * (1 - math.exp(-tau / 0.09) * math.cos(tau * 19))
 
-    def hand_pose(self, t):
-        """the pinch on screen and the hand's tilt: it comes up from below, then the strike, a quick flick"""
-        up = float(smoother(T_UP[0], T_UP[1], t))
-        gx = MATCH_G[0] + 90 * (1 - up) + 5 * math.sin(t * 1.1)
-        gy = MATCH_G[1] + 1250 * (1 - up) + 4 * math.sin(t * 1.4 + 1)
-        r = -0.35 * (1 - up) + 0.03 * math.sin(t * 0.9)
-        s = t - T_LIGHT
-        wind = float(sstep(-0.3, -0.08, s)) * (1 - float(sstep(-0.08, 0.0, s)))
-        flick = (s / 0.05) * math.exp(1 - s / 0.05) if s > 0 else 0.0
-        return gx - 8 * flick, gy + 16 * wind - 30 * flick, r + 0.05 * wind - 0.07 * flick
-
-    def to_hand(self, SX, SY, pose):
-        gx, gy, r = pose
-        dx, dy = (SX - gx) / HAND_S, (SY - gy) / HAND_S
-        c, s_ = math.cos(r), math.sin(r)
-        return dx * c + dy * s_, -dx * s_ + dy * c
-
-    def from_hand(self, x, y, pose):
-        gx, gy, r = pose
-        c, s_ = math.cos(r), math.sin(r)
-        return gx + (x * c - y * s_) * HAND_S, gy + (x * s_ + y * c) * HAND_S
-
-    def flame_size(self, t):
-        s = t - T_LIGHT
-        if s < 0: return 0.0
-        return float(sstep(0, 0.05, s)) * (1 + 1.3 * math.exp(-s / 0.1)) * (1 + 0.5 * float(smoother(T_SPREAD - 0.2, T_SPREAD + 0.5, t)))
-
-    def flame_pos(self, t):
-        """the match head on screen"""
-        return self.from_hand(MATCH_HEAD[0], MATCH_HEAD[1], self.hand_pose(t))
-
-    def match_glow(self, t, SX, SY):
-        """how much the flame lights a point, 0..1"""
-        f = self.flame_size(t)
-        if f <= 0: return np.zeros(SX.shape)
-        hx, hy = self.flame_pos(t)
-        flick = 1 + 0.12 * math.sin(t * 23) * math.sin(t * 7.7)
-        return min(f, 1.6) * 0.62 * flick * np.exp(-np.hypot(SX - hx, SY - hy + 30 * f) / 300)
-
-    def hand_layer(self, b, col, gl, solid, t, SX, SY, burnt):
-        """ultron's hand (a little machine, ray marched): dark metal, rimmed red by the field behind it, lit by the
-        match it holds; then the match flame and the sparks of the strike"""
-        pose = self.hand_pose(t)
-        if pose[1] > 2300: return
-        lx, ly = self.to_hand(SX, SY, pose)
-        box = (lx > -40) & (lx < 160) & (ly > -90) & (ly < 560) & ~burnt
-        if box.any():
-            px, py = lx[box], ly[box]
-            o = np.stack([px, py, np.full(px.shape, 60.0)], 1)
-            sdf = lambda x, y, z: np.minimum(hand_sdf(x, y, z), match_sdf(x, y, z))
-            tt, hit = march(sdf, o, np.array([0.0, 0.0, -1.0]), 0.0, 160.0, steps=48, eps=0.35)
-            if hit.any():
-                P = o[hit] + tt[hit, None] * np.array([0.0, 0.0, -1.0])
-                n = normals(sdf, P, e=0.6)
-                ism = match_sdf(P[:, 0], P[:, 1], P[:, 2]) < hand_sdf(P[:, 0], P[:, 1], P[:, 2])
-                f = self.flame_size(t)
-                Fl = np.array([MATCH_HEAD[0], MATCH_HEAD[1] - 14 * f, 14.0])   # the flame, in hand units
-                L = Fl[None, :] - P; dist = np.linalg.norm(L, axis=1); L = L / dist[:, None]
-                ndl = np.clip((n * L).sum(1), 0, 1)
-                fall = 1 / (1 + (dist / 130) ** 2)
-                diff = 1.7 * f * ndl * fall
-                R = -L + 2 * (n * L).sum(1)[:, None] * n
-                spec = 2.2 * f * np.clip(R[:, 2], 0, 1) ** 22 * fall
-                rim = (1 - np.clip(n[:, 2], 0, 1)) ** 2 * 0.55              # the red field behind catches its edges
-                top = 0.12 * np.clip(-n[:, 1], 0, 1)
-                hb = np.clip(0.2 + top + rim + diff + spec, 0, 1)
-                hb = np.where(ism, np.clip(0.4 + 0.8 * diff, 0, 1), hb)
-                hc = np.where((spec > 0.35)[:, None], PALE, np.where((diff > rim)[:, None], HOT * 0.7 + RED * 0.3, RED))
-                hc = np.where(ism[:, None], HOT, hc)
-                rr, cc = np.nonzero(box)
-                rr, cc = rr[hit], cc[hit]
-                b[rr, cc] = hb; col[rr, cc] = hc; solid[rr, cc] = True
-                gl[rr, cc] = SHADE[np.clip((hb * len(SHADE)).astype(int), 0, len(SHADE) - 1)]
-        # the flame: a teardrop that leans and licks upward, white at its root
-        f = self.flame_size(t)
-        if f > 0:
-            hx, hy = self.flame_pos(t)
-            v = (hy + 12 - SY) / (165 * f * (1 + 0.12 * math.sin(t * 17) * math.sin(t * 6.1)))
-            u = (SX - hx - 16 * f * v * np.sin(v * 3 - t * 9) * (fbm(v * 2 - t * 3, np.full(SX.shape, t), 2, 7) + 0.3)) / (30 * f)
-            # its light blooms on everything right around it
-            bloom = min(f, 1.5) * np.exp(-np.hypot(SX - hx, (SY - hy + 60 * f) * 0.8) / 60) * ~burnt
-            bl = bloom > 0.06
-            bb = bloom[bl][:, None]
-            b[bl] = np.clip(b[bl] + 0.5 * bloom[bl], 0, 1); col[bl] = col[bl] * (1 - bb * 0.7) + HOT * bb * 0.7
-            soft = bl & ~solid & (gl == 0)                       # the empty cells round it just glow
-            gl[soft] = SOFT[np.clip((bloom[soft] * 1.5 * (len(SOFT) - 1)).astype(int), 0, len(SOFT) - 1)]
-            col[soft] = HOT; solid |= soft
-            w = np.sqrt(np.clip(v + 0.15, 0, None)) * np.clip(1 - v, 0, None) ** 1.2 / 0.452
-            fl = (np.abs(u) < w) & (v > -0.15) & (v < 1) & ~burnt
-            core = 1 - np.abs(u) / np.maximum(w, 1e-3)
-            fb = np.clip(0.55 + 0.45 * core * (1 - 0.6 * v), 0, 1)
-            white = (core > 0.4) & (v < 0.6)
-            b[fl] = np.where(white, 1.0, fb)[fl]
-            col[fl] = np.where(white[fl][:, None], PALE, np.where((core > 0.12)[fl][:, None], HOT, RED))
-            gl[fl] = np.where(white, SHADE[-1], SHADE[np.clip((fb * len(SHADE)).astype(int), 0, len(SHADE) - 1)])[fl]
-            solid |= fl
-            # the strike: sparks fly off the head
-            s = t - T_LIGHT
-            sp = self.sparks
-            live = (s > 0) & (s < sp["life"])
-            if live.any():
-                a = sp["a"][live]; vv = sp["v"][live]
-                x = hx + np.cos(a) * vv * s
-                y = hy + np.sin(a) * vv * s + 900 * s * s
-                r = ((y - FOY) / FCH).astype(int); c = (x / FCW).astype(int)
-                ok = (r >= 0) & (r < FROWS) & (c >= 0) & (c < FCOLS)
-                b[r[ok], c[ok]] = 1.0; col[r[ok], c[ok]] = PALE; gl[r[ok], c[ok]] = CI["*"]; solid[r[ok], c[ok]] = True
-
     def scene_a(self, t, SX, SY, fi):
         shape = (FROWS, FCOLS)
         b = np.zeros(shape); col = np.zeros(shape + (3,), np.float32)
@@ -644,17 +484,24 @@ class Film:
             rgb = sample(self.ultron, np.clip(PX, 0, w - 1.01), np.clip(PY, 0, h - 1.01))
             fld = sample(self.ult_bg, np.clip(PX, 0, w - 1.01), np.clip(PY, 0, h - 1.01))
             near = sample(self.ult_near, np.clip(PX, 0, w - 1.01), np.clip(PY, 0, h - 1.01))
-            G = self.match_glow(t, SX, SY)
             fb = np.clip((rgb[..., 0] - 0.05) / 0.8, 0, 1) ** 0.85                  # him: shaded, darks pushed down
-            fb = np.clip(fb + G * (0.1 + 0.6 * fb), 0, 0.92)                          # the match lights him from below
             # the field: a wall of red code that fades out softly around him, so he stands in front of it
-            ub = fld * (0.62 * np.clip((0.5 - near) / 0.38, 0, 1) ** 1.2 + 0.3 * G) + (1 - fld) * fb
+            ub = fld * 0.62 * np.clip((0.5 - near) / 0.38, 0, 1) ** 1.2 + (1 - fld) * fb
             white = rgb.min(-1) > 0.55
             ub = np.where(white, 1.0, ub)
             ucol = np.where(white[..., None], PALE, np.where((fld > 0.5)[..., None], RED, redmap(np.minimum(fb * 1.15, 1))))
-            hot = sum(np.exp(-np.hypot(PX - ex, PY - ey) / 6.0) for ex, ey in ULT_EYES) * (1.1 + 0.2 * math.sin(t * 2.2))
-            ub = np.maximum(ub, np.clip(hot, 0, 1))
-            ucol = np.where((hot > 0.25)[..., None], PALE, ucol)
+            # his eyes burn brighter and brighter, then flare: the fire starts there
+            flare = float(smoother(4.55, 5.0, t)) * math.exp(-max(t - 5.0, 0.0) / 0.35)
+            de = np.minimum.reduce([np.hypot(PX - ex, PY - ey) for ex, ey in ULT_EYES])
+            core = np.exp(-de / (6.0 + 2.0 * flare)) * (1.1 + 0.2 * math.sin(t * 2.2) + 0.8 * flare)
+            halo = flare * np.exp(-de / 9.0)
+            streak = flare * np.maximum.reduce([np.exp(-np.abs(PY - ey) / 2.0 - np.abs(PX - ex) / (20 + 40 * flare))
+                                                for ex, ey in ULT_EYES])          # a flare of light across each eye
+            ub = np.maximum(ub, np.clip(np.maximum(core, streak), 0, 1))
+            ub = np.where(halo > 0.12, np.maximum(ub, 0.25 + 0.6 * halo), ub)
+            ucol = np.where((np.maximum(core, streak) > 0.25)[..., None], PALE,
+                            np.where((halo > 0.12)[..., None], RED * 0.5 + HOT * 0.5, ucol))
+            hot = np.maximum.reduce([core, halo, streak])
             # typed in with the code: a cell shows him once its line of code has reached it
             ci = (np.arange(FCOLS)[None, :] + np.floor(self.code_v * t).astype(int)[:, None]) % FCOLS
             seen = t >= np.take_along_axis(self.code_tf, ci, 1)
@@ -665,7 +512,6 @@ class Film:
             b = np.where(on & ~gap, ub, b); col = np.where(on[..., None], ucol, col)
             gl = np.where(fon & (code > 0) & (hot < 0.25), code, gl)
             solid |= on & ~fon
-            self.hand_layer(b, col, gl, solid, t, SX, SY, burnt)
 
         # the x-ray, revealed where the fire has burnt through; the reels spin, a scan line runs down it
         if t > 7.0:
@@ -689,7 +535,7 @@ class Film:
             col = np.where(on[..., None], redmap(bb), col)
             solid |= burnt & (ink > 0.03)
 
-        # fire: from the match the pixel flames spread out over him, scrolling up, burn him away, then die
+        # fire: from his eyes the pixel flames spread out over him, scrolling up, burn him away, then die
         if T_SPREAD < t < 9.0:
             dF = np.hypot(SX - FIRE_O[0], (SY - FIRE_O[1]) * 0.9)
             R = 2100 * float(smoother(T_SPREAD, T_SPREAD + 1.6, t)) + 170 * (fbm(SX / 260, SY / 260 + t * 0.6, 2, 3) - 0.5)
@@ -764,7 +610,8 @@ class Film:
         self.eyes = eyes
         dist = np.array([math.hypot(x, y) for x, y, _, _ in eyes])
         self.eye_open = 16.85 + 0.05 * dist
-        self.eye_close = 22.85 + 0.9 * (1 - dist / dist.max())           # outside in, the hero eye last
+        self.eye_close = 22.85 + 0.9 * (1 - dist / dist.max())           # outside in
+        self.eye_close[0] = 24.0                                          # the hero eye last, with the camera on it
         self.eye_ph = rng.uniform(0, 6.3, len(eyes))
         # where each eye looks: a new spot every so often, reached in a quick jump, like real eyes do
         self.gaze = []
@@ -800,7 +647,7 @@ class Film:
         return a + (pts[k - 1] - a) * f * f * (3 - 2 * f)
 
     def hero_open(self, t):
-        return 1 - float(smoother(self.eye_close[0], self.eye_close[0] + 0.2, t))
+        return 1 - float(smoother(self.eye_close[0], self.eye_close[0] + 0.35, t))
 
     def prison_photo(self, X, Y, t):
         """the eye with bars (reference photo), sampled at eye units; the hands rattle the bars on the hit"""
@@ -938,15 +785,16 @@ class Film:
         cam = self.cam_b(t)
         X, Y = self.to_eye(SX, SY, cam)
         Z = cam[2]
-        if 14.4 <= t < SKIN[1]:
+        if 14.4 <= t < MCUT[1]:
             b, folds = self.flesh(X, Y, t, Z)
             col = redmap(b); gl = np.zeros(shape, np.int64); solid = folds | (b > 0.03)
             # "flaw in your design": they all snap to look at you; "is not your mortality": they look away again
             look = float(smoother(17.9, 18.0, t)) * (1 - float(smoother(19.9, 20.05, t)))
             for i, (ex, ey, es, er) in enumerate(self.eyes):
                 ph = self.eye_ph[i]
-                ex = ex + 0.06 * math.sin(t * 0.9 + ph); ey = ey + 0.04 * math.sin(t * 0.7 + 2 * ph)   # the skin breathes
-                er = er + 0.04 * math.sin(t * 0.6 + 3 * ph)
+                dr = 1 - float(smoother(23.0, 23.8, t)) if i == 0 else 1.0       # the hero eye settles for the cut
+                ex = ex + 0.06 * dr * math.sin(t * 0.9 + ph); ey = ey + 0.04 * dr * math.sin(t * 0.7 + 2 * ph)   # the skin breathes
+                er = er + 0.04 * dr * math.sin(t * 0.6 + 3 * ph)
                 pxc, pyc = self.from_eye(np.array([ex]), np.array([ey]), cam)
                 rad = 1.9 * es * EU * Z
                 r0, r1 = int((pyc[0] - rad - FOY) / FCH), int((pyc[0] + rad - FOY) / FCH) + 2
@@ -998,17 +846,21 @@ class Film:
             b = pb * m + b * (1 - m); col = pc * mm + col * (1 - mm)
             gl = np.where(m > 0.5, pg, gl); solid = np.where(m > 0.5, ps, solid)
 
-        # the camera sinks into the skin between the closed eyes; the skin melts into the skin of a hand, and
-        # pulling back, the hand holds a closed ring box
-        if t > SKIN[0]:
-            rb, rc, rg, rsolid = self.box_scene(SX, SY, t)
-            a = np.clip((t - SKIN[0]) / (SKIN[1] - SKIN[0]) + 0.35 * (self.rand - 0.5), 0, 1)
-            a = a * a * (3 - 2 * a)
-            b = b * (1 - a) + rb * a; col = col * (1 - a[..., None]) + rc * a[..., None]
+        # the match cut: the closed eye's lid line becomes the seam of a closed ring box; the seam starts out
+        # bent along the lid and straightens as the camera pulls back to the hands holding the box
+        if t > MCUT[0]:
+            k = 1 - float(smoother(MCUT[0], MCUT[1] + 0.4, t))
+            bend = 0.0
+            if k > 0:
+                ylo = lids(cam[0] + (SX - 540) / (EU * Z), 0.0)[1]
+                bend = -(ylo - cam[1]) * EU * Z * k
+            rb, rc, rg, rsolid = self.box_scene(SX, SY, t, bend)
+            a = float(smoother(MCUT[0], MCUT[1], t))
+            b = b * (1 - a) + rb * a; col = col * (1 - a) + rc * a
             gl = np.where(a > 0.5, rg, gl); solid = np.where(a > 0.5, rsolid, solid)
         return b, col, gl, solid
 
-    # ---------- the ending: a ring box (from a reference) opens, an Esc key inside; it's pressed, the screen goes off
+    # ---------- the ending: a ring box (from a reference) opens, an Esc key inside, its light breathing; it goes dark
     def setup_box(self):
         here = os.path.dirname(os.path.abspath(__file__))
         img = np.asarray(Image.open(os.path.join(here, "assets", "esc_box.png")).convert("RGB"), np.float32) / 255.0
@@ -1040,7 +892,7 @@ class Film:
     def box_cam(self, t):
         cx, cy = ckey(t, BOXCAM_X), ckey(t, BOXCAM_Y)
         z = math.exp(ckey(t, BOXCAM_Z)) * 1080 / self.box_img.shape[1]     # screen px per image px
-        return cx, cy, z, 0.02 * math.sin(t * 0.8)
+        return cx, cy, z, 0.02 * math.sin(t * 0.8) * float(smoother(MCUT[1], MCUT[1] + 1.0, t))
 
     def lid_angle(self, t):
         x = (t - T_OPEN) / LID_T
@@ -1049,18 +901,15 @@ class Film:
         a = t - T_OPEN - LID_T
         return math.pi / 2 + 0.03 * math.exp(-a / 0.2) * math.sin(a * 14)
 
-    def box_scene(self, SX, SY, t):
+    def box_scene(self, SX, SY, t, bend=0.0):
         shape = SX.shape
         cx, cy, z, rl = self.box_cam(t)
         c, s = math.cos(rl), math.sin(rl)
-        dx, dy = SX - 540, SY - 960
+        dx, dy = SX - 540, SY - bend - 960
         AX = cx + (dx * c + dy * s) / z
         AY = cy + (-dx * s + dy * c) / z
-        # the key goes down when it's pressed
-        press = float(smoother(T_PRESS, T_PRESS + 0.07, t))
         on_key = (AX > KEY_BOX[0]) & (AX < KEY_BOX[1]) & (AY > KEY_BOX[2]) & (AY < KEY_BOX[3])
-        rgb = sample(self.box_plate, AX, np.where(on_key, AY - 11 * press, AY))
-        rgb = np.where((on_key & (press > 0))[..., None], rgb * (1 - 0.18 * press), rgb)
+        rgb = sample(self.box_plate, AX, AY)
         # the lid: closed it lies over the opening (we see its top), opening it swings up on its hinge
         th = self.lid_angle(t)
         ye = HINGE + LID_D * math.cos(th) - LID_H * math.sin(th)
@@ -1085,17 +934,18 @@ class Film:
             IX = LID_X[0] + (AX - lx0) * (LID_X[1] - LID_X[0]) / (lx1 - lx0)
             lid = sample(self.box_img, IX, IY) * (0.55 + 0.45 * o)
             rgb = np.where(m[..., None], lid, rgb)
-        # the two fingers ride the lid's edge: they rest on the closed lid, lift it, hold it open
+        # the two fingers come down onto the closed lid, then ride its edge: they lift it and hold it open
         dfin = max(ye - FING_TIP, 0.0) + 7 * math.exp(-((t - T_OPEN + 0.12) / 0.1) ** 2)
-        FY = AY - dfin
+        FY = AY - dfin + 430 * (1 - float(smoother(25.25, 26.15, t)))
         fa = sample(self.fing, AX, FY)
         if (fa > 0.5).any():
             fa = np.where(fa > 0.5, 1.0, 0.0) * (1 - (dfin > 1) * (1 - sstep(30, 120, FY)))   # lowered, they come out of the dark
             rgb = rgb * (1 - fa[..., None]) + sample(self.box_img, AX, FY) * fa[..., None]
-        # light spills out of the opened box and pulses with the heart
+        # light spills out of the opened box, pulses with the heart, then keeps breathing
         pulse = sum(math.exp(-(t - tb) / 0.22) for tb, _ in BEATS if t >= tb)
+        breath = float(smoother(27.6, 28.4, t)) * (0.5 + 0.5 * math.sin((t - 28.4) * 3.3))
         d = np.hypot(AX - KEY_C[0], (AY - KEY_C[1]) * 1.3)
-        glow = o * (0.5 + 0.5 * pulse) * np.exp(-d / 85) * (1 - press * 0.6)
+        glow = o * (0.5 + 0.5 * pulse + 0.3 * breath) * np.exp(-d / 85)
         mx = rgb.max(-1); mn = rgb.min(-1)
         b = np.clip((mx - 0.13) / 0.8, 0, 1) ** 1.05
         red = (mx - mn) > 0.22
@@ -1108,29 +958,11 @@ class Film:
         h, w = self.box_img.shape[:2]
         edge = np.clip(np.minimum.reduce([AX, w - AX, AY, h - AY]) / 45, 0, 1)
         b = b * edge
+        # the end: the hands and the box go dark, the Esc key and its light last
+        lit = np.clip(np.maximum(on_key, glow / 0.35), 0, 1)
+        b = b * (lit * (1 - float(smoother(T_FADE[1], T_FADE[2], t))) + (1 - lit) * (1 - float(smoother(T_FADE[0], T_FADE[1], t))))
         solid = b > 0.05
         return np.where(solid, b, 0.0), col.astype(np.float32), np.zeros(shape, np.int64), solid
-
-    def crt_off(self, idx, col, t):
-        """Esc: the picture collapses to a line, the line to a dot, the dot goes out"""
-        a = float(smoother(T_OFF, T_OFF + 0.2, t))
-        bx = float(smoother(T_OFF + 0.2, T_OFF + 0.36, t))
-        if a <= 0:
-            return idx, col
-        sy, sx = max(1 - a, 0.004), max(1 - bx, 0.004)
-        rr = np.arange(FROWS); cc = np.arange(FCOLS)
-        r0, c0 = (FROWS - 1) / 2, (FCOLS - 1) / 2
-        rs = np.round(r0 + (rr - r0) / sy).astype(int); cs = np.round(c0 + (cc - c0) / sx).astype(int)
-        okr = (rs >= 0) & (rs < FROWS); okc = (cs >= 0) & (cs < FCOLS)
-        ni = np.zeros_like(idx); nc = np.zeros_like(col)
-        sub_i = idx[np.clip(rs, 0, FROWS - 1)][:, np.clip(cs, 0, FCOLS - 1)]
-        sub_c = col[np.clip(rs, 0, FROWS - 1)][:, np.clip(cs, 0, FCOLS - 1)]
-        ok = okr[:, None] & okc[None, :]
-        ni[ok] = sub_i[ok]; nc[ok] = sub_c[ok]
-        boost = 1 + 2.5 * a + 2 * bx
-        nc = np.clip(nc * boost + (a > 0.7) * 0.3, 0, 1)
-        fade = 1 - float(smoother(T_OFF + 0.3, T_OFF + 0.55, t))
-        return ni, (nc * fade).astype(np.float32)
 
     # ---------- compose
     def lyric_overlay(self, img, t):
@@ -1172,9 +1004,8 @@ class Film:
         empty = ~solid & (b < 0.035) & (gl == 0)
         cidx, ccol = self.code_layer(t, fi)
         pulse = sum(math.exp(-(t - tb) / 0.2) for tb, _ in BEATS if t >= tb)     # the heartbeat lights the room
-        ccol = ccol * (1 + 2.5 * pulse)
+        ccol = ccol * (1 + 2.5 * pulse) * (1 - float(smoother(T_FADE[0], T_FADE[1], t)))
         idx = np.where(empty, cidx, idx); col = np.where(empty[..., None], ccol, col)
-        idx, col = self.crt_off(idx, col.astype(np.float32), t)
         img = render_fine(idx, col.astype(np.float32))
         return self.lyric_overlay(img, t)
 
