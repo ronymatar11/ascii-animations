@@ -10,9 +10,9 @@ yet waste their lives: the tape unspools, the camera follows it down to money on
 they demand freedom: the string snaps, the money drops out of frame -> iron bars slam down one by one,
 the first over the string -> then construct their: hands grab them -> own prisons: pull back, the prison
 is inside an eye -> perhaps the greatest flaw in your design: the eye is one of a wall of eyes, all turning
-to look at you -> is not your mortality: they all close -> it is your extraordinary ability: they give way
-to the bust again -> to remain alive / without ever truly living: it cries a white line that kicks into two
-heartbeats and runs flat; the camera pulls back and the bust's light dies.
+to look at you -> is not your mortality: they all close -> it is your extraordinary ability: they give way to two hands
+holding a closed ring box (from a reference) -> to remain alive: on the hit the lid springs open, an Esc key
+inside, its light pulsing with the heart -> without ever truly living: Esc is pressed, the screen switches off.
 
 Export:   python curse_of_being_human.py --music voice.mp4 --export curse.mp4
 """
@@ -236,10 +236,16 @@ ROLLB = [(12.6, 0), (14.6, 0.0), (16.0, 0.04), (17.6, 0.1), (19.5, -0.06), (21.0
 BAR_DX, BAR_R = 0.16, 0.016
 BAR_TIP, BAR_FALL = -0.30, 0.17                  # where the bars' ends land, how long each takes to fall
 # the bust comes back at the end: bust photo px per eye unit, and the px of its left eye (where it cries)
-BUST_EU, BUST_TEAR = 201.0, (205.0, 305.0)
-T_TEAR, TEAR_A, TEAR_V = 25.0, 7.0, 2.6
-TEAR0, TEAR_SLANT = (0.152, -0.283), -0.0275     # where the tear leaves the lower lid; x drift per unit down
-BEATS = [(26.5, 0.8), (27.45, 0.48)]             # (R-spike time, amplitude)
+BEATS = [(26.5, 0.8), (27.45, 0.48)]             # heart hits: the box's light pulses
+# the ring box (reference image px): lid hinge, how deep it lies closed, how tall it stands open, its sides
+HINGE, LID_D, LID_H, LID_TOP = 510, 135, 280, 230
+LID_X, BASE_X = (372, 612), (368, 630)
+KEY_BOX, KEY_C = (395, 600, 505, 645), (497, 560)
+T_OPEN, T_PRESS, T_OFF = 26.45, 29.0, 29.12      # the lid opens on the hit; Esc is pressed; the screen goes off
+BOXCAM_X = [(22.6, 500), (24.5, 497), (26.4, 498), (27.3, 492), (27.9, 495), (28.9, 497), (30.55, 497)]
+BOXCAM_Y = [(22.6, 650), (24.5, 645), (26.4, 640), (27.3, 500), (27.9, 520), (28.9, 568), (30.55, 570)]
+BOXCAM_Z = [(22.6, math.log(3.3)), (24.5, math.log(3.0)), (26.4, math.log(2.85)), (27.3, math.log(1.05)),
+            (27.9, math.log(1.15)), (28.9, math.log(2.6)), (30.55, math.log(2.75))]
 
 
 class Film:
@@ -258,11 +264,7 @@ class Film:
         self.setup_tape()
         self.setup_bars(rng)
         self.setup_wall(rng)
-        self.tear_beats = [(tb - 1.2 / TEAR_V, A) for tb, A in BEATS]
-        # the closing shot: the eye, the square and the whole line under it
-        tip = TEAR0[1] - self.tear_s(29.2)
-        top, bot = 1.12, tip - 0.3
-        self.end_cx, self.end_cy, self.end_z = 0.28, (top + bot) / 2, 1920 / (EU * (top - bot) * 1.06)
+        self.setup_box()
 
     # ---------- the page of code behind everything
     def build_code(self, rng):
@@ -586,14 +588,6 @@ class Film:
     def cam_b(self, t):
         Z = math.exp(ckey(t, LOGZ))
         cx, cy = ckey(t, self.CXK), ckey(t, CY)
-        w = float(smoother(25.2, 25.9, t))
-        if w > 0:                                   # follow the falling tear, its tip a little below the middle
-            tx, ty = self.tear_tip(t)
-            cx, cy = cx + (tx * 0.5 + 0.08 - cx) * w, cy + (ty + 0.7 - cy) * w
-        f = float(smoother(27.7, 29.2, t))
-        if f > 0:                                   # pull back: the eye, the square and the whole line under it
-            cx, cy = cx + (self.end_cx - cx) * f, cy + (self.end_cy - cy) * f
-            Z = math.exp(math.log(Z) * (1 - f) + math.log(self.end_z) * f)
         return cx, cy, Z, ckey(t, ROLLB)
 
     def to_eye(self, SX, SY, cam):
@@ -818,10 +812,10 @@ class Film:
             b = np.zeros(shape); col = np.zeros(shape + (3,), np.float32)
             gl = np.zeros(shape, np.int64); solid = np.zeros(shape, bool)
 
-        # the wall of closed eyes gives way, in code, to the bust from the beginning
+        # the wall of closed eyes gives way, in code, to hands holding a closed ring box
         if t > 22.6:
-            rb, rc, rg, rsolid = self.bust_end(X, Y, t)
-            sw = 22.85 + 0.8 * np.clip(np.hypot(X, Y * 1.2) / 4.5, 0, 1) + 0.25 * self.rand
+            rb, rc, rg, rsolid = self.box_scene(SX, SY, t)
+            sw = 22.85 + 0.8 * np.clip(np.hypot(SX - 540, (SY - 960) * 1.2) / 1100, 0, 1) + 0.25 * self.rand
             on = t >= sw
             b = np.where(on, rb, b); col = np.where(on[..., None], rc, col)
             gl = np.where(on, rg, gl); solid = np.where(on, rsolid, solid)
@@ -829,83 +823,103 @@ class Film:
             rng = np.random.default_rng(fi + 11)
             gl = np.where(dec, rng.choice(PRINTABLE, shape), gl)
             b = np.where(dec, 0.85, b); col = np.where(dec[..., None], HOT, col); solid |= dec
-
-        # the tear, then the heartbeat line
-        if t > T_TEAR - 0.35:
-            self.draw_line(b, col, gl, solid, t, cam)
         return b, col, gl, solid
 
-    def bust_end(self, X, Y, t):
-        """the rim-lit bust again, the camera on its face; it cries the line, and its light dies at the end"""
-        BX = BUST_TEAR[0] + (X - TEAR0[0]) * BUST_EU
-        BY = BUST_TEAR[1] - (Y - TEAR0[1]) * BUST_EU
-        rim = self.bust_sample(self.bust_rim, BX, BY)
-        glow = self.bust_sample(self.bust_glow, BX, BY)
-        inner = self.bust_sample(self.bust_in, BX, BY)
-        pulse = sum(math.exp(-(t - tb) / 0.18) for tb, _ in BEATS if t >= tb)
-        life = (1 - float(smoother(28.9, 29.9, t))) * (0.88 + 0.12 * math.sin(t * 2.2)) * (1 + 0.5 * pulse)
-        rb = (np.clip(rim * 1.8, 0, 1) ** 0.7 + 0.55 * np.clip(glow * 2.2, 0, 1) ** 0.9) * life
-        b = np.clip(rb, 0, 1)
-        col = redmap(b)
-        solid = (b > 0.04) | (inner > 0.05)
-        b = np.where(b > 0.04, b, 0.0)
-        return b, col.astype(np.float32), np.zeros(X.shape, np.int64), solid
+    # ---------- the ending: a ring box (from a reference) opens, an Esc key inside; it's pressed, the screen goes off
+    def setup_box(self):
+        here = os.path.dirname(os.path.abspath(__file__))
+        img = np.asarray(Image.open(os.path.join(here, "assets", "esc_box.png")).convert("RGB"), np.float32) / 255.0
+        self.box_img = img
+        # the plate: the open lid painted out, so the lid can be drawn opening over it
+        plate = img.copy()
+        x0, x1, y0, y1 = LID_X[0] - 6, LID_X[1] + 6, LID_TOP - 4, HINGE + 3
+        reg = plate[y0:y1, x0:x1]
+        red = (reg.max(-1) - reg.min(-1)) > 0.2
+        reg[red] = 0.1
+        self.box_plate = plate
 
-    # ---------- the tear and the line it becomes
-    def tear_s(self, t):
-        tau = t - T_TEAR
-        if tau <= 0: return 0.0
-        t1 = TEAR_V / TEAR_A
-        return 0.5 * TEAR_A * tau ** 2 if tau < t1 else 0.5 * TEAR_A * t1 ** 2 + TEAR_V * (tau - t1)
+    def box_cam(self, t):
+        cx, cy = ckey(t, BOXCAM_X), ckey(t, BOXCAM_Y)
+        z = math.exp(ckey(t, BOXCAM_Z)) * 1080 / self.box_img.shape[1]     # screen px per image px
+        return cx, cy, z, 0.02 * math.sin(t * 0.8)
 
-    def tear_xy(self, s):
-        return TEAR0[0] + TEAR_SLANT * s + self.ecg(s), TEAR0[1] - s
+    def lid_angle(self, t):
+        x = (t - T_OPEN) / 0.42
+        if x <= 0: return 0.0
+        if x < 1: return math.pi / 2 * (1 - (1 - x) ** 3)
+        a = t - T_OPEN - 0.42
+        return math.pi / 2 + 0.07 * math.exp(-a / 0.12) * math.sin(a * 30)
 
-    def tear_tip(self, t):
-        x, y = self.tear_xy(np.array([self.tear_s(t)]))
-        return float(x[0]), float(y[0])
+    def box_scene(self, SX, SY, t):
+        shape = SX.shape
+        cx, cy, z, rl = self.box_cam(t)
+        c, s = math.cos(rl), math.sin(rl)
+        dx, dy = SX - 540, SY - 960
+        AX = cx + (dx * c + dy * s) / z
+        AY = cy + (-dx * s + dy * c) / z
+        # the key goes down when it's pressed
+        press = float(smoother(T_PRESS, T_PRESS + 0.07, t))
+        on_key = (AX > KEY_BOX[0]) & (AX < KEY_BOX[1]) & (AY > KEY_BOX[2]) & (AY < KEY_BOX[3])
+        rgb = sample(self.box_plate, AX, np.where(on_key, AY - 11 * press, AY))
+        rgb = np.where((on_key & (press > 0))[..., None], rgb * (1 - 0.18 * press), rgb)
+        # the lid: closed it lies over the opening (we see its top), opening it swings up on its hinge
+        th = self.lid_angle(t)
+        ye = HINGE + LID_D * math.cos(th) - LID_H * math.sin(th)
+        if ye > HINGE + 1:                                       # its outside
+            m = (AX > BASE_X[0]) & (AX < BASE_X[1]) & (AY > HINGE) & (AY < ye)
+            f = np.clip((AY - HINGE) / (ye - HINGE), 0, 1)
+            face = np.stack([0.86 - 0.12 * f, 0.1 + 0.04 * (1 - f), 0.15 + 0.03 * (1 - f)], -1)
+            front = m & (AY > ye - 16)
+            face = np.where(front[..., None], np.array([0.62, 0.06, 0.1]), face)
+            edge = m & ((np.abs(AX - BASE_X[0]) < 2.5) | (np.abs(AX - BASE_X[1]) < 2.5) | (np.abs(AY - ye) < 2.5) |
+                        (np.abs(AY - (ye - 16)) < 1.5))
+            face = np.where(edge[..., None], 0.05, face)
+            rgb = np.where(m[..., None], face, rgb)
+        elif ye < HINGE - 1:                                     # its inside, squashed until it's fully up
+            m = (AX > LID_X[0]) & (AX < LID_X[1]) & (AY > ye) & (AY < HINGE)
+            IY = HINGE - (HINGE - AY) * (HINGE - LID_TOP) / (HINGE - ye)
+            lid = sample(self.box_img, AX, IY)
+            rgb = np.where(m[..., None], lid, rgb)
+        # light spills out of the opened box and pulses with the heart
+        o = math.sin(min(th, math.pi / 2))
+        pulse = sum(math.exp(-(t - tb) / 0.22) for tb, _ in BEATS if t >= tb)
+        d = np.hypot(AX - KEY_C[0], (AY - KEY_C[1]) * 1.3)
+        glow = o * (0.5 + 0.5 * pulse) * np.exp(-d / 85) * (1 - press * 0.6)
+        mx = rgb.max(-1); mn = rgb.min(-1)
+        b = np.clip((mx - 0.13) / 0.8, 0, 1) ** 1.05
+        red = (mx - mn) > 0.22
+        white = mn > 0.72
+        col = np.where(red[..., None], rgb / (mx[..., None] + 0.02), redmap(b * 0.95))
+        col = np.where(white[..., None], PALE, col)
+        b = np.clip(b + 0.6 * glow * (on_key | (b < 0.2)), 0, 1)
+        col = np.where(((glow > 0.12) & ~red & ~white)[..., None], HOT, col)
+        # soften the edges of the picture into the dark
+        h, w = self.box_img.shape[:2]
+        edge = np.clip(np.minimum.reduce([AX, w - AX, AY, h - AY]) / 45, 0, 1)
+        b = b * edge
+        solid = b > 0.05
+        return np.where(solid, b, 0.0), col.astype(np.float32), np.zeros(shape, np.int64), solid
 
-    def ecg(self, s):
-        h = np.zeros_like(s)
-        for tb, A in self.tear_beats:
-            sg = (s - self.tear_s(tb)) / 4.0                    # stretched along the line so it reads as a heartbeat
-            h += A * (0.07 * np.exp(-((sg - 0.08) / 0.035) ** 2) - 0.06 * np.exp(-((sg - 0.26) / 0.012) ** 2) +
-                      np.exp(-((sg - 0.30) / 0.016) ** 2) - 0.25 * np.exp(-((sg - 0.335) / 0.014) ** 2) +
-                      0.16 * np.exp(-((sg - 0.55) / 0.05) ** 2))
-        return h
-
-    def draw_line(self, b, col, gl, solid, t, cam):
-        """the tear: a thick white line like the reference, glowing, that kicks into two heartbeats, then runs flat"""
-        s_tip = self.tear_s(t)
-        Z = cam[2]
-        pulse = sum(math.exp(-(t - tb) / 0.18) for tb, _ in BEATS if t >= tb)
-        bead = float(smoother(T_TEAR - 0.35, T_TEAR, t))
-        if s_tip > 0:
-            s = np.concatenate([np.arange(0, s_tip, 0.4 / (EU * Z)), [s_tip]])
-            xs, ys = self.tear_xy(s)
-            SXl, SYl = self.from_eye(xs, ys, cam)
-            nx, ny = np.gradient(SYl), -np.gradient(SXl)
-            nl = np.hypot(nx, ny) + 1e-9
-            nx, ny = nx / nl, ny / nl
-            hw = max(0.028 * EU * Z, 0.6 * FCW)
-            age = (s_tip - s) / TEAR_V
-            for off in np.arange(-hw - 2 * FCW, hw + 2 * FCW + 0.1, 0.8 * FCW):
-                core = abs(off) <= hw
-                lv = 1.0 if core else 0.35 * math.exp(-(abs(off) - hw) / FCW)
-                c = (PALE if core else HOT)[None, :] * np.clip(lv * (0.8 + 0.2 * np.exp(-age / 0.5) + 0.3 * pulse), 0, 1.2)[:, None]
-                splat(gl, col, solid, SXl + nx * off, SYl + ny * off, np.clip(c, 0, 1), b, min(1.0, 0.95 * lv + 0.2 * pulse),
-                      BLOCK if abs(off) < hw * 0.6 else None)
-        # the drop (or the bright head of the line)
-        tx, ty = self.tear_tip(t)
-        px, py = self.from_eye(np.array([tx]), np.array([ty - 0.03 * bead]), cam)
-        rpx = (5 + 9 * bead) * (1 if s_tip <= 0 else 1.5) * max(Z, 0.5)
-        d = np.hypot(FGX - px[0], (FGY - py[0]) * 0.8)
-        glow = np.clip(1 - d / (rpx * 2.4), 0, 1)
-        core = d < rpx
-        on = glow > 0.05
-        b[on] = np.maximum(b[on], glow[on]); col[on] = np.where(core[on][:, None], PALE, HOT * glow[on][:, None] + col[on] * (1 - glow[on][:, None]))
-        gl[core] = CI["@"]; solid[on] = True
-
+    def crt_off(self, idx, col, t):
+        """Esc: the picture collapses to a line, the line to a dot, the dot goes out"""
+        a = float(smoother(T_OFF, T_OFF + 0.2, t))
+        bx = float(smoother(T_OFF + 0.2, T_OFF + 0.36, t))
+        if a <= 0:
+            return idx, col
+        sy, sx = max(1 - a, 0.004), max(1 - bx, 0.004)
+        rr = np.arange(FROWS); cc = np.arange(FCOLS)
+        r0, c0 = (FROWS - 1) / 2, (FCOLS - 1) / 2
+        rs = np.round(r0 + (rr - r0) / sy).astype(int); cs = np.round(c0 + (cc - c0) / sx).astype(int)
+        okr = (rs >= 0) & (rs < FROWS); okc = (cs >= 0) & (cs < FCOLS)
+        ni = np.zeros_like(idx); nc = np.zeros_like(col)
+        sub_i = idx[np.clip(rs, 0, FROWS - 1)][:, np.clip(cs, 0, FCOLS - 1)]
+        sub_c = col[np.clip(rs, 0, FROWS - 1)][:, np.clip(cs, 0, FCOLS - 1)]
+        ok = okr[:, None] & okc[None, :]
+        ni[ok] = sub_i[ok]; nc[ok] = sub_c[ok]
+        boost = 1 + 2.5 * a + 2 * bx
+        nc = np.clip(nc * boost + (a > 0.7) * 0.3, 0, 1)
+        fade = 1 - float(smoother(T_OFF + 0.3, T_OFF + 0.55, t))
+        return ni, (nc * fade).astype(np.float32)
 
     # ---------- compose
     def lyric_overlay(self, img, t):
@@ -948,8 +962,8 @@ class Film:
         pulse = sum(math.exp(-(t - tb) / 0.2) for tb, _ in BEATS if t >= tb)     # the heartbeat lights the room
         ccol = ccol * (1 + 2.5 * pulse)
         idx = np.where(empty, cidx, idx); col = np.where(empty[..., None], ccol, col)
-        g = 1 - float(sstep(29.7, DUR - 0.05, t))
-        img = render_fine(idx, col.astype(np.float32) * g)
+        idx, col = self.crt_off(idx, col.astype(np.float32), t)
+        img = render_fine(idx, col.astype(np.float32))
         return self.lyric_overlay(img, t)
 
 

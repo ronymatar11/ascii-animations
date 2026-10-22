@@ -43,8 +43,9 @@ One continuous camera, no cuts, every scene turns into the next: a red rim-lit c
 its head, flames climb over it and burn through to an x-ray skull with a cassette for a brain; the
 tape unspools down to money on a string; the string snaps and the money drops; iron bars slam down,
 hands grab them; the prison is inside an eye, the eye is one of a wall of eyes that turn to look at
-you, then close; the bust returns and cries a line that kicks into two heartbeats and runs flat.
-The bust, fire, x-ray and money come from reference images in `assets/`, drawn in code. The lyrics
+you, then close; two hands hold out a ring box, it opens on the hit with an Esc key inside, Esc is
+pressed and the screen switches off. The bust, fire, x-ray, money and ring box come from reference
+images in `assets/`, drawn in code. The lyrics
 type out as subtitles.
 ```
 python curse_of_being_human.py --music voice.mp4 --export curse.mp4
