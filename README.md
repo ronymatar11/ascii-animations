@@ -38,6 +38,17 @@ and every pulse follows its beat. `--start` picks where to cut the track (negati
 python second_sun.py --music chihiro.mp3 --export second_sun.mp4
 ```
 
+## 4. The Curse of Being Human (9:16, red and black, cut to a spoken-word track)
+One continuous camera, no cuts, every scene turns into the next: a red rim light draws a classical
+bust, its face lights up in dots, catches fire, burns off into an x-ray skull with a cassette for a
+brain; the tape unspools down to money on a string; the money drops, strings harden into bars, hands
+grab them; the prison is inside an eye, the eye is one of a wall of eyes; they close; one opens in a
+red square, cries a line that becomes a heartbeat, then goes flat. The lyrics type out as subtitles.
+```
+python curse_of_being_human.py --music voice.mp4 --export curse.mp4
+python curse_of_being_human.py --music voice.mp4 --no-lyrics      # visuals only
+```
+
 ## Ideas for next ones
 - Logo reveal for clients: code assembles into a brand logo
 - Any photo or painting as the final reveal
