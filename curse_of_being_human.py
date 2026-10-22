@@ -6,8 +6,8 @@ the curse of being human: red code types across the screen and the code is ultro
 written in the scrolling code itself, his eyes glowing; he leans in toward us, swaying, his head turning and
 nodding -> yet manufacture chaos: his eyes flare and catch fire, and the pixel flames (from a reference) spread
 out over him from there, the heat running ahead of a ragged burning edge ->
-they fear death: it burns through his face to the x-ray skull underneath (from a reference), in the same place,
-facing the same way, its eye socket where his burning eye was, a cassette for a brain ->
+they fear death: it burns through his face to the x-ray skull underneath (from a reference), where his head was,
+a cassette for a brain ->
 yet waste their lives: the tape unspools, the camera follows it down to money on a string (from a reference) ->
 they demand freedom: the string snaps, the money falls and the camera falls after it, down into a cell
 (from a reference photo) -> then construct their: the hands rattle the bars ->
@@ -184,14 +184,13 @@ ULT_HEAD = [(165, 100), (178, 80), (200, 66), (236, 60), (258, 68), (278, 86), (
 T_SPREAD = 5.05
 FIRE_O = [(553.0, 365.0), (353.0, 504.0)]        # his eyes, on screen, when they catch
 # the x-ray: screen px per image px, the head's centre on screen, the reels, where the drawn tape ends
-# the photo is turned to face the way ultron faces, and at first it sits right where his head was: its eye
-# socket where his burning eye was, the size of his head; then the camera settles on it
-SKULL_K = [(7.0, 0.95), (7.8, 0.98), (8.6, 1.3), (9.2, 1.5), (12.6, 1.5)]
-SKULL_HY = [(7.0, 425), (7.8, 432), (8.6, 600), (9.2, 860), (12.6, 880)]
-SKULL_E = (419.0, 240.0)
-REELS = [((476.0, 120.0), 40.0), ((351.0, 146.0), 62.0)]
+# at first it sits where his head was, the size of his head; then the camera settles on it
+SKULL_K = [(7.0, 1.0), (7.8, 1.03), (8.6, 1.3), (9.2, 1.5), (12.6, 1.5)]
+SKULL_HY = [(7.0, 470), (7.8, 478), (8.6, 640), (9.2, 860), (12.6, 880)]
+SKULL_E = (300.0, 240.0)
+REELS = [((243.0, 120.0), 40.0), ((368.0, 146.0), 62.0)]
 SKULL_DOME = (308.8, 179.5, 296.8, 203.0)        # the ellipse of the skull's outline, for the top the photo crops off
-TAPE0 = (469.0, 415.0)
+TAPE0 = (250.0, 415.0)
 TAPE_L = [(9.2, 0), (9.45, 400), (9.7, 1200), (9.95, 2080), (10.15, 2260), (10.4, 2140), (10.7, 2190), (11.2, 2175), (12.6, 2175)]
 FIRE_K = 2.0                                     # fire pattern, screen px per image px
 # the money photo: the string's top, the point that ends up at the centre of the screen, scale and tilt
@@ -278,8 +277,7 @@ class Film:
         fig = Image.fromarray(255 - np.asarray(fld))
         self.ult_near = np.asarray(fig.filter(ImageFilter.GaussianBlur(7)), np.float32) / 255.0
         self.fire = np.asarray(Image.open(os.path.join(here, "assets", "fire.png")).convert("RGB"), np.float32) / 255.0
-        skull, self.skull_pad = dome(np.asarray(Image.open(os.path.join(here, "assets", "skull_xray.png")).convert("L"), np.float32) / 255.0)
-        self.skull = np.ascontiguousarray(skull[:, ::-1])                # facing the way he faces
+        self.skull, self.skull_pad = dome(np.asarray(Image.open(os.path.join(here, "assets", "skull_xray.png")).convert("L"), np.float32) / 255.0)
         self.money = np.asarray(Image.open(os.path.join(here, "assets", "money.png")).convert("RGBA"), np.float32) / 255.0
         self.prison = np.asarray(Image.open(os.path.join(here, "assets", "eye_bars.png")).convert("L"), np.float32) / 255.0
         self.build_code(rng)
@@ -361,7 +359,7 @@ class Film:
         k = ckey(11.5, SKULL_K)
         off = (MONEY_C[0] - MONEY_KNOT[0], MONEY_C[1] - MONEY_KNOT[1])
         hxf = 540 - off[0] * K_M0 - (TAPE0[0] - SKULL_E[0]) * k
-        self.HXS = [(7.0, 734), (7.8, 726), (8.8, 555), (10.6, hxf), (12.6, hxf)]
+        self.HXS = [(7.0, 515), (7.8, 520), (8.8, 545), (10.6, hxf), (12.6, hxf)]
         self.PAN = [(0, 0)]
         y0 = ckey(11.5, SKULL_HY) + (TAPE0[1] - SKULL_E[1]) * k
         P = 960 - (y0 + TAPE_L[-1][1] + off[1] * K_M0)
