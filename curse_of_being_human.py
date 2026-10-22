@@ -188,9 +188,12 @@ def fist_sdf(x, y, z, clench):
 
 # ------------------------------------------------------------------ scene A camera (photo px)
 # the bust photo: screen px per photo px, where it sits, the point between the eyes
-BUST_K = [(0, 1.82), (2.6, 2.1), (5.0, 2.65), (7.4, 2.9), (9.0, 3.1)]
-HY = [(0, 670), (2.6, 720), (5.0, 860), (7.4, 900), (9.0, 920)]
-ROLL = [(0, -0.03), (2.6, 0.02), (5.0, -0.02), (7.4, 0.02), (9.2, 0.0), (12.6, 0.0)]
+# the head is already moving at the first frame: it drifts in from up and to the left, tilted, and
+# settles into its pose by "Humans pursue peace"
+BUST_K = [(0, 1.62), (1.4, 1.88), (2.7, 2.1), (5.0, 2.65), (7.4, 2.9), (9.0, 3.1)]
+BUST_X = [(0, 330), (1.4, 470), (2.7, 540), (9.0, 540)]
+HY = [(0, 560), (1.4, 665), (2.7, 725), (5.0, 860), (7.4, 900), (9.0, 920)]
+ROLL = [(0, -0.2), (1.4, -0.05), (2.7, 0.02), (5.0, -0.02), (7.4, 0.02), (9.2, 0.0), (12.6, 0.0)]
 BUST_E = (255.0, 290.0)
 # the x-ray: screen px per image px, the head's center, the reels, where the drawn tape ends
 SKULL_K = [(6.8, 2.25), (7.4, 2.1), (9.2, 1.55), (12.6, 1.5)]
@@ -400,9 +403,12 @@ class Film:
         shape = (FROWS, FCOLS)
         b = np.zeros(shape); col = np.zeros(shape + (3,), np.float32)
         gl = np.zeros(shape, np.int64); solid = np.zeros(shape, bool)
-        roll = ckey(t, ROLL)
+        # small, slow head movement on top of the camera path
+        hm = 1 - float(smoother(6.5, 7.6, t))
+        roll = ckey(t, ROLL) + hm * (0.022 * math.sin(t * 1.25) + 0.01 * math.sin(t * 2.9 + 1))
         cr, sr = math.cos(roll), math.sin(roll)
-        dx, dy = SX - 540, SY - ckey(t, HY)
+        dx = SX - ckey(t, BUST_X) - hm * (9 * math.sin(t * 0.85) + 4 * math.sin(t * 2.1))
+        dy = SY - ckey(t, HY) - hm * (6 * math.sin(t * 1.05 + 1))
         burnt = t >= self.T_burn
 
         # the bust: a red rim light traces it, dots fill it in, then firelight
@@ -413,8 +419,7 @@ class Film:
             rim = self.bust_sample(self.bust_rim, PX, PY)
             inner = self.bust_sample(self.bust_in, PX, PY)
             glow = self.bust_sample(self.bust_glow, PX, PY)
-            theta = np.abs(np.arctan2(PX - BUST_E[0], -(PY - 420)))
-            rimI = sstep(-0.3, 0.3, math.pi * 1.1 * float(smoother(0.1, 2.3, t)) - theta)
+            rimI = 1.0                                                  # lit from the first frame, no fade in
             keyI = float(smoother(2.9, 3.8, t))
             fireI = float(smoother(5.0, 6.0, t))
             flick = 0.75 + 0.25 * np.sin(t * 23 + PY * 0.05) * np.sin(t * 17 + PX * 0.04)
