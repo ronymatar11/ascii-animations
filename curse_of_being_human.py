@@ -6,7 +6,8 @@ the curse of being human: red code types across the screen and the code is ultro
 written in the scrolling code itself, his eyes glowing; he leans in toward us, swaying, his head turning and
 nodding -> yet manufacture chaos: his eyes flare and catch fire, and the pixel flames (from a reference) spread
 out over him from there, the heat running ahead of a ragged burning edge ->
-they fear death: he burns away in sparks to an x-ray skull with a cassette for a brain (from a reference) ->
+they fear death: it burns through his face to the x-ray skull underneath (from a reference), in the same place,
+facing the same way, its eye socket where his burning eye was, a cassette for a brain ->
 yet waste their lives: the tape unspools, the camera follows it down to money on a string (from a reference) ->
 they demand freedom: the string snaps, the money falls and the camera falls after it, down into a cell
 (from a reference photo) -> then construct their: the hands rattle the bars ->
@@ -183,12 +184,14 @@ ULT_HEAD = [(165, 100), (178, 80), (200, 66), (236, 60), (258, 68), (278, 86), (
 T_SPREAD = 5.05
 FIRE_O = [(553.0, 365.0), (353.0, 504.0)]        # his eyes, on screen, when they catch
 # the x-ray: screen px per image px, the head's centre on screen, the reels, where the drawn tape ends
-SKULL_K = [(6.8, 1.2), (7.4, 1.25), (9.2, 1.5), (12.6, 1.5)]
-SKULL_HY = [(6.8, 520), (7.4, 545), (9.2, 860), (12.6, 880)]
-SKULL_E = (300.0, 240.0)
-REELS = [((243.0, 120.0), 40.0), ((368.0, 146.0), 62.0)]
+# the photo is turned to face the way ultron faces, and at first it sits right where his head was: its eye
+# socket where his burning eye was, the size of his head; then the camera settles on it
+SKULL_K = [(7.0, 0.95), (7.8, 0.98), (8.6, 1.3), (9.2, 1.5), (12.6, 1.5)]
+SKULL_HY = [(7.0, 425), (7.8, 432), (8.6, 600), (9.2, 860), (12.6, 880)]
+SKULL_E = (419.0, 240.0)
+REELS = [((476.0, 120.0), 40.0), ((351.0, 146.0), 62.0)]
 SKULL_DOME = (308.8, 179.5, 296.8, 203.0)        # the ellipse of the skull's outline, for the top the photo crops off
-TAPE0 = (250.0, 415.0)
+TAPE0 = (469.0, 415.0)
 TAPE_L = [(9.2, 0), (9.45, 400), (9.7, 1200), (9.95, 2080), (10.15, 2260), (10.4, 2140), (10.7, 2190), (11.2, 2175), (12.6, 2175)]
 FIRE_K = 2.0                                     # fire pattern, screen px per image px
 # the money photo: the string's top, the point that ends up at the centre of the screen, scale and tilt
@@ -275,12 +278,14 @@ class Film:
         fig = Image.fromarray(255 - np.asarray(fld))
         self.ult_near = np.asarray(fig.filter(ImageFilter.GaussianBlur(7)), np.float32) / 255.0
         self.fire = np.asarray(Image.open(os.path.join(here, "assets", "fire.png")).convert("RGB"), np.float32) / 255.0
-        self.skull, self.skull_pad = dome(np.asarray(Image.open(os.path.join(here, "assets", "skull_xray.png")).convert("L"), np.float32) / 255.0)
+        skull, self.skull_pad = dome(np.asarray(Image.open(os.path.join(here, "assets", "skull_xray.png")).convert("L"), np.float32) / 255.0)
+        self.skull = np.ascontiguousarray(skull[:, ::-1])                # facing the way he faces
         self.money = np.asarray(Image.open(os.path.join(here, "assets", "money.png")).convert("RGBA"), np.float32) / 255.0
         self.prison = np.asarray(Image.open(os.path.join(here, "assets", "eye_bars.png")).convert("L"), np.float32) / 255.0
         self.build_code(rng)
         # the fire eats him from his eyes outward
-        self.T_burn = 6.75 + 1.45 * np.clip(self.fire_dist(FGX, FGY) / 1500, 0, 1) + 0.35 * (fbm(FGX / 150, FGY / 150, 3, 19) - 0.5)
+        # "they fear death": it burns through to the skull, from his eyes outward
+        self.T_burn = 7.35 + 1.05 * np.clip(self.fire_dist(FGX, FGY) / 1500, 0, 1) + 0.3 * (fbm(FGX / 150, FGY / 150, 3, 19) - 0.5)
         self.setup_tape()
         self.setup_embers(rng)
         self.setup_prison()
@@ -356,7 +361,7 @@ class Film:
         k = ckey(11.5, SKULL_K)
         off = (MONEY_C[0] - MONEY_KNOT[0], MONEY_C[1] - MONEY_KNOT[1])
         hxf = 540 - off[0] * K_M0 - (TAPE0[0] - SKULL_E[0]) * k
-        self.HXS = [(6.8, 540), (8.6, 545), (10.6, hxf), (12.6, hxf)]
+        self.HXS = [(7.0, 734), (7.8, 726), (8.8, 555), (10.6, hxf), (12.6, hxf)]
         self.PAN = [(0, 0)]
         y0 = ckey(11.5, SKULL_HY) + (TAPE0[1] - SKULL_E[1]) * k
         P = 960 - (y0 + TAPE_L[-1][1] + off[1] * K_M0)
@@ -481,7 +486,7 @@ class Film:
         b = np.zeros(shape); col = np.zeros(shape + (3,), np.float32)
         gl = np.zeros(shape, np.int64); solid = np.zeros(shape, bool)
         # the camera is locked on ultron
-        hm = 1 - float(smoother(6.5, 7.6, t))
+        hm = 1 - float(smoother(6.4, 7.3, t))                         # he goes still before he burns through
         burnt = t >= self.T_burn
 
         # ultron: the code types him in; his eyes glow, his head turns slowly, looking about, like a man's would
@@ -545,7 +550,7 @@ class Film:
             solid |= on & ~fon
 
         # the x-ray, revealed where the fire has burnt through; the reels spin, a scan line runs down it
-        if t > 7.0:
+        if t > 7.1:
             k, hx, hy, rl = self.skull_cam(t)
             c2, s2 = math.cos(rl), math.sin(rl)
             ex, ey = SX - hx, SY - hy
@@ -572,9 +577,9 @@ class Film:
             dF = self.fire_dist(SX, SY)
             nz = fbm(SX / 220, SY / 220 + t * 0.8, 2, 3) - 0.5
             nz2 = fbm(SX / 70, SY / 70 + t * 2.4, 2, 5) - 0.5                  # a ragged, licking edge
-            R = 2300 * float(smoother(T_SPREAD, T_SPREAD + 2.0, t)) ** 1.5 + 45 * float(sstep(T_SPREAD - 0.1, T_SPREAD + 0.25, t))
+            R = 2300 * float(smoother(T_SPREAD, T_SPREAD + 2.3, t)) ** 1.5 + 45 * float(sstep(T_SPREAD - 0.1, T_SPREAD + 0.25, t))
             R = R + (60 + 0.15 * R) * nz + (30 + 0.1 * R) * nz2
-            heat = np.clip(1 - (dF - R) / 280, 0, 1) * (dF > R) * float(t < 7.6)
+            heat = np.clip(1 - (dF - R) / 280, 0, 1) * (dF > R) * float(t < 7.8)
             hb = (b > 0.04) & (heat > 0)
             b = np.where(hb, np.clip(b * (1 + 0.6 * heat), 0, 1), b)
             col = np.where(hb[..., None], col * (1 - 0.45 * heat[..., None]) + HOT * 0.45 * heat[..., None], col)
@@ -597,19 +602,20 @@ class Film:
                 gl = np.where(live & (fade > 0.3) & (a > 0.5), 0, gl)
                 solid |= live & (fade > 0.3) & (a > 0.5)
             # the burning edge: sparks of code
-            edge = np.clip(1 - np.abs(R - dF) / 40, 0, 1) * (R > 30) * (t < 7.6) * np.clip(0.55 + 2.2 * nz2, 0, 1)
+            edge = np.clip(1 - np.abs(R - dF) / 40, 0, 1) * (R > 30) * (t < 7.8) * np.clip(0.55 + 2.2 * nz2, 0, 1)
             eg = edge > 0.3
             if eg.any():
                 rng = np.random.default_rng(fi + 13)
                 gl = np.where(eg, rng.choice(PRINTABLE, (FROWS, FCOLS)), gl)
                 b = np.where(eg, np.maximum(b, 0.55 + 0.45 * edge), b)
                 col = np.where(eg[..., None], np.where((edge > 0.75)[..., None], PALE, HOT), col); solid |= eg
-            ember = (t > self.T_burn - 0.12) & (t < self.T_burn + 0.06)
+            ember = (t > self.T_burn - 0.05) & (t < self.T_burn + 0.02)          # sparks where it burns through
             if ember.any():
                 rng = np.random.default_rng(fi + 3)
+                ember &= rng.random((FROWS, FCOLS)) < 0.3
                 gl = np.where(ember, rng.choice(PRINTABLE, (FROWS, FCOLS)), gl)
-                b = np.where(ember, 0.95, b)
-                col = np.where(ember[..., None], np.where((self.rand > 0.5)[..., None], HOT, RED), col)
+                b = np.where(ember, 1.0, b)
+                col = np.where(ember[..., None], np.where((self.rand > 0.15)[..., None], HOT, PALE), col)
 
         self.embers(b, col, gl, solid, t)
 
@@ -1039,7 +1045,7 @@ class Film:
             fade = 1 - float(sstep(t1, t1 + 0.15, t))
             shown = s + ("█" if typing or (txt.startswith(">>>") and (t * 2.4) % 2 < 1) else "")
             w = f.getlength(txt)
-            y = 1560 if title else 1690
+            y = 1300 if title else 1390                                       # clear of the app's caption and buttons
             c = (255, 205, 195) if not txt.startswith(">>>") else (255, 95, 75)
             dr.text(((W - w) / 2, y), shown, font=f, fill=tuple(int(v * fade) for v in c),
                     stroke_width=4, stroke_fill=(0, 0, 0))
