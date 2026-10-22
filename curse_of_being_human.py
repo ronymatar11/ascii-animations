@@ -3,10 +3,10 @@ The Curse of Being Human  |  9:16, red and black, every frame is text, cut to a 
 One continuous camera, no cuts: each scene turns into the next.
 
 the curse of being human: a red rim light traces a classical bust (from a reference photo) ->
-humans pursue peace: dots fill it in, the camera moves in on the head ->
+humans pursue peace: dots fill it in, the camera holds still ->
 yet manufacture chaos: pixel flames (from a reference) climb over it ->
-they fear death: the fire burns away to an x-ray skull with a cassette for a brain (from a reference) ->
-yet waste their lives: the tape unspools, the camera follows it down to money on a string (from a reference) ->
+they fear death: it burns away to sparks and ash, one ember left where the head was ->
+yet waste their lives: a thread unspools from it, the camera follows it down to money on a string (from a reference) ->
 they demand freedom: the string snaps, the money drops out of frame; the string thickens into a bar and
 the cell decodes in around it (from a reference photo) -> then construct their: the hands rattle the bars ->
 own prisons: pull back, the prison is inside an eye -> perhaps the greatest flaw in your design: the eye is
@@ -58,7 +58,7 @@ POOL = [
     "assert alive and not living", "for day in life: repeat(day)", "mortality.flaw = False",
     "ability = extraordinary(remain_alive)", "try: live()", "except Fear: exist()",
     "heart.beat() if alive else None", "eyes = [Eye() for _ in range(n)]", "while True: watch(you)",
-    "skull.load(Cassette('memories'))", "money.hang(string)", "bars.extend(hands)",
+    "ash = burn(bust)", "money.hang(string)", "bars.extend(hands)",
     "# the curse of being human", "import mortality", "return alive and not living", "pulse = 0",
     "design.flaws.append(you)", "time.sleep(life)", "if not living: continue", "0x00 0xDE 0xAD",
 ]
@@ -168,17 +168,10 @@ def lids(xl, op):
 # the bust photo: screen px per photo px, where it sits, the point between the eyes
 # the head is already moving at the first frame: it drifts in from up and to the left, tilted, and
 # settles into its pose by "Humans pursue peace"
-BUST_K = [(0, 1.62), (1.4, 1.88), (2.7, 2.1), (5.0, 2.65), (7.4, 2.9), (9.0, 3.1)]
-BUST_X = [(0, 330), (1.4, 470), (2.7, 540), (4.6, 520), (6.4, 552), (9.0, 540)]
-HY = [(0, 560), (1.4, 665), (2.7, 725), (5.0, 860), (7.4, 900), (9.0, 920)]
-ROLL = [(0, -0.2), (1.4, -0.05), (2.7, 0.02), (5.0, -0.02), (7.4, 0.02), (9.2, 0.0), (12.6, 0.0)]
+# the bust photo, on a locked camera: screen px per photo px, the screen y of the point between its eyes
+BUST_K, BUST_Y = 2.0, 700.0
 BUST_E = (255.0, 290.0)
-# the x-ray: screen px per image px, the head's center, the reels, where the drawn tape ends
-SKULL_K = [(6.8, 2.25), (7.4, 2.1), (9.2, 1.55), (12.6, 1.5)]
-SKULL_HY = [(6.8, 980), (9.2, 900), (12.6, 900)]
-SKULL_E = (300.0, 240.0)
-REELS = [((243.0, 120.0), 40.0), ((368.0, 146.0), 62.0)]
-TAPE0 = (250.0, 415.0)
+EMBER_Y = 700.0                                  # the head's last ember, where the thread falls from
 TAPE_L = [(9.2, 0), (9.45, 400), (9.7, 1200), (9.95, 2080), (10.15, 2260), (10.4, 2140), (10.7, 2190), (11.2, 2175), (12.6, 2175)]
 FIRE_K = 2.0                                     # fire pattern, screen px per image px
 # the money photo: the string's top, the point that ends up at the centre of the screen, scale and tilt
@@ -236,7 +229,6 @@ class Film:
         self.rand = rng.random((FROWS, FCOLS))
         self.setup_bust()
         here = os.path.dirname(os.path.abspath(__file__))
-        self.skull = np.asarray(Image.open(os.path.join(here, "assets", "skull_xray.png")).convert("L"), np.float32) / 255.0
         self.fire = np.asarray(Image.open(os.path.join(here, "assets", "fire.png")).convert("RGB"), np.float32) / 255.0
         self.money = np.asarray(Image.open(os.path.join(here, "assets", "money.png")).convert("RGBA"), np.float32) / 255.0
         self.prison = np.asarray(Image.open(os.path.join(here, "assets", "eye_bars.png")).convert("L"), np.float32) / 255.0
@@ -244,6 +236,7 @@ class Film:
         # the fire eats the face from the bottom up
         self.T_burn = 7.25 + 1.2 * np.clip((1750 - FGY) / 1500, 0, 1) + 0.35 * (fbm(FGX / 150, FGY / 150, 3, 19) - 0.5)
         self.setup_tape()
+        self.setup_embers(rng)
         self.setup_prison()
         self.setup_wall(rng)
         self.setup_box()
@@ -304,23 +297,6 @@ class Film:
              img[j + 1, i] * (1 - fx) * fy + img[j + 1, i + 1] * fx * fy)
         return np.where(ok, v, 0.0)
 
-    def setup_tape(self):
-        # the tape hangs straight; once the camera has panned, the money hangs in the middle of the frame
-        k = ckey(11.5, SKULL_K)
-        off = (MONEY_C[0] - MONEY_KNOT[0], MONEY_C[1] - MONEY_KNOT[1])
-        hxf = 540 - off[0] * K_M0 - (TAPE0[0] - SKULL_E[0]) * k
-        self.HXS = [(6.8, 540), (8.6, 545), (10.6, hxf), (12.6, hxf)]
-        self.PAN = [(0, 0)]
-        y0 = ckey(11.5, SKULL_HY) + (TAPE0[1] - SKULL_E[1]) * k
-        P = 960 - (y0 + TAPE_L[-1][1] + off[1] * K_M0)
-        self.PAN = [(0, 0), (9.35, 0), (9.9, 0.12 * P), (10.6, 0.58 * P), (11.3, 0.93 * P), (12.6, P)]
-        # the money only exists on the tape once its end is out of frame
-        self.t_att = 12.0
-        for tt in np.arange(9.2, 10.4, 0.01):
-            _, hang = self.tape(tt)
-            if hang is not None and hang[1] > 2010:
-                self.t_att = tt; break
-
     def setup_prison(self):
         # the string the money hung from lines up with the middle bar in the photo
         _, self.snap_hang = self.tape(T_SNAP)
@@ -335,28 +311,70 @@ class Film:
         self.string_k = 1.0 / (EU * Z0)
         self.impacts = [(T_SNAP, 6.0), (T_REVEAL + 0.05, 5.0)]
 
-    def skull_cam(self, t):
-        return ckey(t, SKULL_K), ckey(t, self.HXS), ckey(t, SKULL_HY) + ckey(t, self.PAN), ckey(t, ROLL)
+    def setup_tape(self):
+        # the thread hangs straight; once the camera has panned, the money hangs in the middle of the frame
+        off = (MONEY_C[0] - MONEY_KNOT[0], MONEY_C[1] - MONEY_KNOT[1])
+        self.TX = [(0, 540), (9.6, 540), (10.6, 540 - off[0] * K_M0), (12.6, 540 - off[0] * K_M0)]
+        P = 960 - (EMBER_Y + TAPE_L[-1][1] + off[1] * K_M0)
+        self.PAN = [(0, 0), (9.35, 0), (9.9, 0.12 * P), (10.6, 0.58 * P), (11.3, 0.93 * P), (12.6, P)]
+        # the money only exists on the thread once its end is out of frame
+        self.t_att = 12.0
+        for tt in np.arange(9.2, 10.4, 0.01):
+            _, hang = self.tape(tt)
+            if hang is not None and hang[1] > 2010:
+                self.t_att = tt; break
 
-    def skull_to_screen(self, PX, PY, t):
-        k, hx, hy, roll = self.skull_cam(t)
-        dx, dy = (PX - SKULL_E[0]) * k, (PY - SKULL_E[1]) * k
-        cr, sr = math.cos(roll), math.sin(roll)
-        return hx + dx * cr - dy * sr, hy + dx * sr + dy * cr
+    def setup_embers(self, rng):
+        """sparks and ash from the burning bust: start points on the bust, at the locked camera"""
+        lit = (self.bust_in > 0.3) | (self.bust_rim > 0.3)
+        ys, xs = np.nonzero(lit)
+        pick = rng.choice(len(xs), 1400, replace=False)
+        sx = 540 + (xs[pick] - BUST_E[0]) * BUST_K
+        sy = BUST_Y + (ys[pick] - BUST_E[1]) * BUST_K
+        r = np.clip(((sy - FOY) / FCH).astype(int), 0, FROWS - 1); c = np.clip((sx / FCW).astype(int), 0, FCOLS - 1)
+        self.emb = dict(x=sx, y=sy, t0=self.T_burn[r, c] + rng.uniform(-0.05, 0.15, len(sx)),
+                        vx=rng.normal(0, 45, len(sx)), vy=-rng.uniform(70, 260, len(sx)),
+                        life=rng.uniform(0.7, 1.9, len(sx)), ph=rng.uniform(0, 6.3, len(sx)))
+
+    def embers(self, b, col, gl, solid, t):
+        e = self.emb
+        age = t - e["t0"]
+        live = (age > 0) & (age < e["life"])
+        if live.any():
+            a = age[live]; f = 1 - a / e["life"][live]
+            x = e["x"][live] + e["vx"][live] * a + 18 * np.sin(a * 3 + e["ph"][live])
+            y = e["y"][live] + e["vy"][live] * a + 35 * a * a
+            r = ((y - FOY) / FCH).astype(int); c = (x / FCW).astype(int)
+            ok = (r >= 0) & (r < FROWS) & (c >= 0) & (c < FCOLS)
+            r, c, f = r[ok], c[ok], f[ok]
+            b[r, c] = np.maximum(b[r, c], 0.3 + 0.7 * f)
+            col[r, c] = np.where((f > 0.55)[:, None], HOT, RED)
+            gl[r, c] = np.where(f > 0.7, CI["*"], np.where(f > 0.35, CI["'"], CI["."]))
+            solid[r, c] = True
+        # the last ember, where the head was: the thread will fall from it
+        g = float(sstep(8.1, 8.5, t)) * (1 - float(sstep(9.6, 10.0, t)))
+        if g > 0:
+            ex, ey = ckey(t, self.TX), EMBER_Y + ckey(t, self.PAN)
+            d = np.hypot(FGX - ex, (FGY - ey) * 0.8)
+            pul = 0.8 + 0.2 * math.sin(t * 9)
+            glow = g * pul * np.clip(1 - d / 34, 0, 1)
+            on = glow > 0.08
+            b[on] = np.maximum(b[on], glow[on]); col[on] = np.where((d[on] < 10)[:, None], PALE, HOT)
+            gl[on & (d < 10)] = CI["@"]; solid |= on
 
     def tape(self, t):
-        """the tape running on from the curls in the x-ray, down out of frame: screen points, hanging end"""
+        """the thread unspooling from the last ember, down out of frame: screen points, hanging end"""
         L = ckey(t, TAPE_L) if t > 9.2 else 0.0
         if L <= 5:
             return None, None
         s = np.concatenate([np.arange(0, min(L, 700), 0.6), np.arange(700, L, 2.5)])
-        k = ckey(t, SKULL_K)
+        k = 1.55
         A = 34 * k * np.exp(-s / 260)
         ph = s / (17 * k) + 1.2 + 0.6 * math.sin(t * 1.3)
         grow = 1 - np.exp(-s / 12)
-        X0, Y0 = self.skull_to_screen(np.array([TAPE0[0]]), np.array([TAPE0[1]]), t)
-        X = X0[0] + A * np.sin(ph) * grow
-        Y = Y0[0] + s + A * (np.cos(ph) - math.cos(1.2)) * grow
+        X0, Y0 = ckey(t, self.TX), EMBER_Y + ckey(t, self.PAN)
+        X = X0 + A * np.sin(ph) * grow
+        Y = Y0 + s + A * (np.cos(ph) - math.cos(1.2)) * grow
         return (X, Y), (X[-1], Y[-1])
 
     def money_pose(self, t, hang):
@@ -409,19 +427,15 @@ class Film:
         shape = (FROWS, FCOLS)
         b = np.zeros(shape); col = np.zeros(shape + (3,), np.float32)
         gl = np.zeros(shape, np.int64); solid = np.zeros(shape, bool)
-        # small, slow head movement on top of the camera path
+        # the camera is locked on the bust; only the light moves
         hm = 1 - float(smoother(6.5, 7.6, t))
-        roll = ckey(t, ROLL) + hm * (0.022 * math.sin(t * 1.25) + 0.01 * math.sin(t * 2.9 + 1))
-        cr, sr = math.cos(roll), math.sin(roll)
-        dx = SX - ckey(t, BUST_X) - hm * (9 * math.sin(t * 0.85) + 4 * math.sin(t * 2.1))
-        dy = SY - ckey(t, HY) - hm * (6 * math.sin(t * 1.05 + 1))
+        dx, dy = SX - 540, SY - BUST_Y
         burnt = t >= self.T_burn
 
         # the bust: a red rim light traces it, dots fill it in, then firelight
         if t < 8.9:
-            k = ckey(t, BUST_K)
-            PX = BUST_E[0] + (dx * cr + dy * sr) / k
-            PY = BUST_E[1] + (-dx * sr + dy * cr) / k
+            PX = BUST_E[0] + dx / BUST_K
+            PY = BUST_E[1] + dy / BUST_K
             rim = self.bust_sample(self.bust_rim, PX, PY)
             inner = self.bust_sample(self.bust_in, PX, PY)
             glow = self.bust_sample(self.bust_glow, PX, PY)
@@ -445,28 +459,6 @@ class Film:
             dots = DOTS[np.clip((fill * 2.6 * (len(DOTS) - 1)).astype(int) + jr, 0, len(DOTS) - 1)]
             gl = np.where(on & (rb <= fill), dots, gl)
             solid |= ~burnt & (on | (inner > 0.05))
-
-        # the x-ray, revealed where the fire has burnt through; the reels spin, a scan line runs down it
-        if t > 7.0:
-            k, hx, hy, rl = self.skull_cam(t)
-            c2, s2 = math.cos(rl), math.sin(rl)
-            ex, ey = SX - hx, SY - hy
-            PX = SKULL_E[0] + (ex * c2 + ey * s2) / k
-            PY = SKULL_E[1] + (-ex * s2 + ey * c2) / k
-            ink = self.bust_sample(self.skull, PX, PY)
-            scan = ((t - 7.3) * 520) % 1500 - 150
-            bb = ink * (1.05 + 0.1 * math.sin(t * 9)) + 0.35 * ink * np.exp(-((PY - scan) / 22) ** 2)
-            spin = t * 2.5 + (0.004 * ckey(t, TAPE_L) if t > 9.2 else 0.0)
-            for (rx, ry), rr in REELS:
-                d = np.hypot(PX - rx, PY - ry)
-                a_ = np.arctan2(PY - ry, PX - rx) - spin
-                spoke = (d < rr * 0.9) & (d > 11) & (np.cos(3 * a_) > 0.93)
-                bb = np.where(spoke, 0.85, bb)
-            on = burnt & (bb > 0.035)
-            bb = np.clip(bb, 0, 1)
-            b = np.where(on, bb, b)
-            col = np.where(on[..., None], redmap(bb), col)
-            solid |= burnt & (ink > 0.03)
 
         # fire: the pixel flames climb from the bottom, scrolling up, burn the face off, then die
         if 4.95 < t < 9.0:
@@ -494,6 +486,8 @@ class Film:
                 gl = np.where(ember, rng.choice(PRINTABLE, (FROWS, FCOLS)), gl)
                 b = np.where(ember, 0.95, b)
                 col = np.where(ember[..., None], np.where((self.rand > 0.5)[..., None], HOT, RED), col)
+
+        self.embers(b, col, gl, solid, t)
 
         # money glow: a red spotlight from the lower left while it hangs
         gm = float(sstep(10.2, 10.9, t)) * (1 - float(sstep(12.1, 12.5, t)))
@@ -870,9 +864,10 @@ class Film:
 
     def frame(self, t, fi):
         # one handheld camera float plus a kick on the heaviest hits, shared by every scene
-        fx = 7 * math.sin(t * 0.7) + 4 * math.sin(t * 1.9 + 1)
-        fy = 6 * math.sin(t * 0.9 + 2) + 3 * math.sin(t * 2.3)
-        for th, amp in [(h, 14.0) for h in HITS] + self.impacts:
+        lock = float(sstep(7.2, 8.4, t))                              # still while the bust is on screen
+        fx = (7 * math.sin(t * 0.7) + 4 * math.sin(t * 1.9 + 1)) * lock
+        fy = (6 * math.sin(t * 0.9 + 2) + 3 * math.sin(t * 2.3)) * lock
+        for th, amp in [(h, 14.0) for h in HITS if h > 7] + self.impacts:
             if 0 <= t - th < 0.5:
                 k = math.exp(-(t - th) / 0.12)
                 fx += amp * k * math.sin((t - th) * 70); fy += amp * 0.75 * k * math.cos((t - th) * 61)
