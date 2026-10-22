@@ -2,8 +2,8 @@
 The Curse of Being Human  |  9:16, red and black, every frame is text, cut to a spoken-word track.
 One continuous camera, no cuts: each scene turns into the next.
 
-the curse of being human: a red rim light draws a classical bust ->
-humans pursue peace: the face lights up in dots -> yet manufacture chaos: it catches fire ->
+the curse of being human: a red rim light traces a classical bust (from a reference photo) ->
+humans pursue peace: dots fill it in, the camera moves in on the head -> yet manufacture chaos: it catches fire ->
 they fear death: the fire burns the face off, an x-ray skull turns to profile, a cassette for a brain ->
 yet waste their lives: the tape unspools, the camera follows it down to a stack of money on a string ->
 they demand freedom: the money drops, the string stays, more strings fall and harden into bars,
@@ -14,9 +14,9 @@ to remain alive / without ever truly living: it cries a line that becomes a hear
 
 Export:   python curse_of_being_human.py --music voice.mp4 --export curse.mp4
 """
-import argparse, math, subprocess
+import argparse, math, os, subprocess
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 from code_to_monalisa import W, H, CI, RAMP, PRINTABLE, sstep, smoother, fbm, find_font, ffmpeg_bin
 from second_sun import (FCW, FCH, FCOLS, FROWS, FOY, FGX, FGY, FATLAS, SOFT, render_fine, glyphs,
@@ -113,32 +113,6 @@ def rot(yaw, pitch):
     cy, sy, cp, sp = math.cos(yaw), math.sin(yaw), math.cos(pitch), math.sin(pitch)
     return np.array([[cy, 0, sy], [0, 1, 0], [-sy, 0, cy]]) @ np.array([[1, 0, 0], [0, cp, -sp], [0, sp, cp]])
 
-def bust_sdf(x, y, z):
-    """a classical bust: head (units ~ head radius), curls with a bun, neck, shoulders"""
-    ax = np.abs(x)
-    d = smin(_ell(x, y - 0.25, z + 0.05, 0.74, 0.90, 0.86), _ell(x, y + 0.30, z - 0.18, 0.54, 0.72, 0.58), 0.30)
-    d = smin(d, _ell(x, y + 0.76, z - 0.28, 0.38, 0.24, 0.34), 0.2)
-    d = smin(d, _sph(x, y + 0.96, z - 0.45, 0.14), 0.15)
-    d = smin(d, _sph(ax - 0.34, y + 0.12, z - 0.47, 0.2), 0.18)
-    d = smin(d, _cap(x, y, z, (-0.34, 0.17, 0.60), (0.34, 0.17, 0.60), 0.10), 0.12)
-    d = _smax(d, -_sph(ax - 0.26, y - 0.04, z - 0.73, 0.12), 0.07)
-    d = smin(d, _sph(ax - 0.26, y - 0.05, z - 0.60, 0.11), 0.03)
-    d = smin(d, _cap(x, y, z, (0, 0.12, 0.70), (0, -0.24, 0.93), 0.07, 0.09), 0.08)
-    d = smin(d, _sph(x, y + 0.27, z - 0.89, 0.095), 0.06)
-    d = smin(d, _sph(ax - 0.085, y + 0.30, z - 0.80, 0.065), 0.05)
-    d = smin(d, _ell(x, y + 0.49, z - 0.79, 0.17, 0.055, 0.08), 0.05)
-    d = smin(d, _ell(x, y + 0.60, z - 0.77, 0.15, 0.06, 0.08), 0.05)
-    d = _smax(d, -_ell(x, y + 0.545, z - 0.85, 0.16, 0.01, 0.08), 0.01)
-    d = smin(d, _ell(ax - 0.72, y, z + 0.02, 0.09, 0.22, 0.14), 0.05)
-    curls = 0.07 * np.sin(13 * x) * np.sin(13 * y + 1) * np.sin(13 * z + 2)
-    hair = _ell(x, y - 0.36, z + 0.08, 0.86, 0.90, 0.95) - curls
-    hair = _smax(hair, (-0.3 + 0.95 * np.maximum(z, 0)) - y, 0.08)
-    d = smin(d, hair, 0.05)
-    d = smin(d, _sph(x, y - 0.15, z + 0.95, 0.33) - 1.3 * curls, 0.12)
-    d = smin(d, _cap(x, y, z, (0, -0.65, -0.08), (0, -1.9, -0.12), 0.38), 0.2)
-    d = smin(d, _ell(x, y + 2.25, z + 0.15, 1.55, 0.55, 0.62), 0.35)
-    return np.maximum(d, -(y + 2.6))
-
 def flesh_mask(x, y, z):
     """cheap head + neck volume for the x-ray"""
     d = np.minimum(_ell(x, y - 0.25, z + 0.05, 0.80, 0.92, 0.90), _ell(x, y + 0.32, z - 0.15, 0.60, 0.70, 0.62))
@@ -192,8 +166,7 @@ def normals(sdf, p, e=0.004):
 def unit(*v):
     v = np.array(v, float); return v / np.linalg.norm(v)
 
-L_RIM1, L_RIM2 = unit(-0.95, 0.25, -0.35), unit(0.95, 0.3, -0.35)
-L_KEY, L_FIRE = unit(-0.5, 0.45, 0.75), unit(0.1, -0.85, 0.5)
+L_KEY = unit(-0.5, 0.45, 0.75)
 
 # ------------------------------------------------------------------ 2D helpers
 def _seg2(x, y, a, b, ra, rb=None):
@@ -249,11 +222,12 @@ def fist_sdf(x, y, z, clench):
     return smin(d, th, 0.04)
 
 # ------------------------------------------------------------------ scene A camera (head units)
-YAW = [(0, -0.95), (2.6, -0.5), (5.0, -0.02), (7.4, 0.35), (9.2, 1.55), (10.6, 1.57), (12.6, 1.6)]
-PITCH = [(0, 0.10), (5.0, 0.02), (9.2, -0.04), (12.6, -0.04)]
-SCALE = [(0, 250), (2.6, 285), (5.0, 325), (7.4, 305), (9.2, 335), (12.6, 340)]
-ROLL = [(0, -0.05), (2.6, 0.02), (5.0, -0.02), (7.4, 0.03), (9.2, 0.0), (12.6, 0.0)]
-HY = [(0, 940), (5.0, 900), (9.2, 880), (12.6, 880)]
+YAW = [(0, 0.0), (7.4, 0.02), (9.2, 1.55), (10.6, 1.57), (12.6, 1.6)]
+PITCH = [(0, 0.02), (5.0, 0.02), (9.2, -0.04), (12.6, -0.04)]
+SCALE = [(0, 405), (2.6, 470), (5.0, 590), (7.4, 640), (9.2, 335), (12.6, 340)]
+ROLL = [(0, -0.03), (2.6, 0.02), (5.0, -0.02), (7.4, 0.02), (9.2, 0.0), (12.6, 0.0)]
+HY = [(0, 670), (2.6, 720), (5.0, 860), (7.4, 900), (9.2, 880), (12.6, 880)]
+BUST_U, BUST_E = 223.0, (255.0, 290.0)          # bust photo: px per head unit, the point between the eyes
 TAPE_L = [(9.2, 0), (9.45, 1.2), (9.7, 3.6), (9.95, 6.2), (10.15, 6.75), (10.4, 6.4), (10.7, 6.55), (11.2, 6.5), (12.6, 6.5)]
 Z_START, Y_START, Z_LINE = -0.40, 0.37, -0.32   # tape leaves the left reel, then hangs at z = Z_LINE
 T_CUT = 11.95                                    # the money drops
@@ -304,6 +278,7 @@ class Film:
         self.handle, self.lyrics = handle, lyrics
         self.rand = rng.random((FROWS, FCOLS))
         self.bill = bill_texture()
+        self.setup_bust()
         self.build_code(rng)
         # the fire eats the face from the bottom up
         self.T_burn = 7.25 + 1.2 * np.clip((1750 - FGY) / 1500, 0, 1) + 0.35 * (fbm(FGX / 150, FGY / 150, 3, 19) - 0.5)
@@ -345,6 +320,33 @@ class Film:
         return np.where(on, idx, 0), col.astype(np.float32)
 
     # ---------- scene A: bust, fire, x-ray, tape, money
+    def setup_bust(self):
+        """the rim-lit bust from the reference photo (red light only), and its filled silhouette"""
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "bust_rim.png")
+        im = Image.open(path).convert("L")
+        rim = np.asarray(im.filter(ImageFilter.MaxFilter(3)).filter(ImageFilter.GaussianBlur(1.0)), np.float32) / 255.0
+        lit = rim > 0.16
+        sil = np.zeros_like(lit)
+        rows = np.nonzero(lit.any(1))[0]
+        for r in range(rows.min(), rows.max() + 1):
+            xs = np.nonzero(lit[max(r - 6, 0):r + 7].any(0))[0]
+            if len(xs) > 1:
+                sil[r, xs.min():xs.max() + 1] = True
+        blur = np.asarray(Image.fromarray((sil * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(28)), np.float32) / 255
+        self.bust_rim = rim
+        self.bust_glow = np.asarray(im.filter(ImageFilter.GaussianBlur(7)), np.float32) / 255.0
+        self.bust_in = np.clip((blur - 0.45) * 2.2, 0, 1) * sil
+
+    def bust_sample(self, img, PX, PY):
+        h, w = img.shape
+        ok = (PX >= 0) & (PX < w - 1) & (PY >= 0) & (PY < h - 1)
+        x0 = np.clip(PX, 0, w - 1.001); y0 = np.clip(PY, 0, h - 1.001)
+        i, j = x0.astype(int), y0.astype(int)
+        fx, fy = x0 - i, y0 - j
+        v = (img[j, i] * (1 - fx) * (1 - fy) + img[j, i + 1] * fx * (1 - fy) +
+             img[j + 1, i] * (1 - fx) * fy + img[j + 1, i + 1] * fx * fy)
+        return np.where(ok, v, 0.0)
+
     def setup_tape(self):
         S, roll = ckey(11.5, SCALE), ckey(11.5, ROLL)
         R = rot(ckey(11.5, YAW), ckey(11.5, PITCH))
@@ -452,36 +454,31 @@ class Film:
         dv = np.array([0.0, 0.0, -1.0]) @ R
         burnt = t >= self.T_burn
 
-        # the bust: rim light first, then the face in dots, then firelight
-        m = box & ~burnt
-        if m.any() and t < 9.3:
-            o = np.stack([u[m], v[m], np.full(m.sum(), 3.0)], 1) @ R
-            tt, hit = march(bust_sdf, o, dv, 1.0, 5.2)
-            if hit.any():
-                p = o[hit] + tt[hit, None] * dv
-                nh = normals(bust_sdf, p)
-                n = nh @ R.T
-                q = p + nh * 0.12
-                ao = np.clip(bust_sdf(q[:, 0], q[:, 1], q[:, 2]) / 0.12, 0, 1)
-                fres = 1 - np.clip(n[:, 2], 0, 1)
-                rim = (np.clip(n @ L_RIM1, 0, 1) + np.clip(n @ L_RIM2, 0, 1)) ** 1.5 * fres ** 1.5 * 2.1
-                key = np.clip(n @ L_KEY, 0, 1)
-                fire = np.clip(n @ L_FIRE, 0, 1)
-                idxs = np.nonzero(m)
-                hr, hc = idxs[0][hit], idxs[1][hit]
-                theta = np.abs(np.arctan2(dx[hr, hc], -dy[hr, hc]))
-                sweep = math.pi * 1.1 * float(smoother(0.1, 2.2, t))
-                rimI = sstep(-0.35, 0.35, sweep - theta)
-                keyI = float(smoother(2.95, 3.7, t))
-                fireI = float(smoother(5.0, 6.0, t))
-                bb = (rimI * np.minimum(1.0, rim) + keyI * (0.04 + 0.9 * key ** 1.3) * (0.35 + 0.65 * ao) * (1 - 0.5 * fireI)
-                      + fireI * 0.9 * fire * (0.5 + 0.5 * ao))
-                bb = np.clip(bb, 0, 1)
-                b[hr, hc] = bb
-                col[hr, hc] = redmap(bb)
-                jr = np.random.default_rng(fi).integers(-1, 2, len(bb))
-                gl[hr, hc] = np.where(bb > 0.04, DOTS[np.clip((bb * (len(DOTS) - 1) + 0.3).astype(int) + jr * (bb < 0.8), 0, len(DOTS) - 1)], 0)
-                solid[hr, hc] = True
+        # the bust: a red rim light traces it, dots fill it in, then firelight
+        if t < 8.9:
+            k = S / BUST_U
+            PX = BUST_E[0] + (dx * cr + dy * sr) / k
+            PY = BUST_E[1] + (-dx * sr + dy * cr) / k
+            rim = self.bust_sample(self.bust_rim, PX, PY)
+            inner = self.bust_sample(self.bust_in, PX, PY)
+            glow = self.bust_sample(self.bust_glow, PX, PY)
+            theta = np.abs(np.arctan2(PX - BUST_E[0], -(PY - 420)))
+            rimI = sstep(-0.3, 0.3, math.pi * 1.1 * float(smoother(0.1, 2.3, t)) - theta)
+            keyI = float(smoother(2.9, 3.8, t))
+            fireI = float(smoother(5.0, 6.0, t))
+            flick = 0.75 + 0.25 * np.sin(t * 23 + PY * 0.05) * np.sin(t * 17 + PX * 0.04)
+            rb = (np.clip(rim * 1.8, 0, 1) ** 0.7 + 0.55 * np.clip(glow * 2.2, 0, 1) ** 0.9) * rimI
+            rb = rb * (1 + 0.3 * keyI + 0.6 * fireI * flick)
+            fill = inner * (keyI * (0.07 + 0.16 * np.clip((900 - PY) / 700, 0, 1)) * (0.85 + 0.15 * math.sin(t * 2.2))
+                            + fireI * 0.35 * flick * np.clip((PY - 250) / 600, 0, 1))
+            on = ~burnt & ((rb > 0.04) | (fill > 0.035))
+            bb = np.clip(np.maximum(rb, fill), 0, 1)
+            b = np.where(on, bb, b)
+            col = np.where(on[..., None], redmap(bb * (1 + 0.3 * fireI)), col)
+            jr = np.random.default_rng(fi).integers(-1, 2, shape)
+            dots = DOTS[np.clip((fill * 2.6 * (len(DOTS) - 1)).astype(int) + jr, 0, len(DOTS) - 1)]
+            gl = np.where(on & (rb <= fill), dots, gl)
+            solid |= ~burnt & (on | (inner > 0.05))
 
         # x-ray: the skull glowing at its edges inside a faint head, a cassette for a brain
         m = box & (t >= self.T_burn - 0.08)
