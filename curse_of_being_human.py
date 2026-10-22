@@ -5,10 +5,10 @@ One continuous camera, no cuts: each scene turns into the next.
 the curse of being human: a red rim light traces a classical bust (from a reference photo) ->
 humans pursue peace: dots fill it in; the camera holds still, the head moves slowly like a person ->
 yet manufacture chaos: pixel flames (from a reference) climb over it ->
-they fear death: it burns away to sparks and ash, one ember left where the head was ->
-yet waste their lives: a thread unspools from it, the camera follows it down to money on a string (from a reference) ->
-they demand freedom: the string snaps, the money drops out of frame; the string thickens into a bar and
-the cell decodes in around it (from a reference photo) -> then construct their: the hands rattle the bars ->
+they fear death: it burns away in sparks to an x-ray skull with a cassette for a brain (from a reference) ->
+yet waste their lives: the tape unspools, the camera follows it down to money on a string (from a reference) ->
+they demand freedom: the string snaps, the money falls and the camera falls after it, down into a cell
+(from a reference photo) -> then construct their: the hands rattle the bars ->
 own prisons: pull back, the prison is inside an eye -> perhaps the greatest flaw in your design: the eye is
 one of a wall of eyes, all turning to look at you -> is not your mortality: they all close -> it is your extraordinary ability: they give way to two hands
 holding a closed ring box (from a reference) -> to remain alive: on the hit the lid springs open, an Esc key
@@ -172,7 +172,12 @@ def lids(xl, op):
 BUST_K, BUST_Y = 2.0, 700.0
 BUST_E = (255.0, 290.0)
 NECK, HEAD_C = (255.0, 520.0), (255.0, 250.0)    # the head turns about the neck; the skull's centre
-EMBER_Y = 700.0                                  # the head's last ember, where the thread falls from
+# the x-ray: screen px per image px, the head's centre on screen, the reels, where the drawn tape ends
+SKULL_K = [(6.8, 1.62), (7.4, 1.62), (9.2, 1.5), (12.6, 1.5)]
+SKULL_HY = [(6.8, 640), (7.4, 645), (9.2, 860), (12.6, 880)]
+SKULL_E = (300.0, 240.0)
+REELS = [((243.0, 120.0), 40.0), ((368.0, 146.0), 62.0)]
+TAPE0 = (250.0, 415.0)
 TAPE_L = [(9.2, 0), (9.45, 400), (9.7, 1200), (9.95, 2080), (10.15, 2260), (10.4, 2140), (10.7, 2190), (11.2, 2175), (12.6, 2175)]
 FIRE_K = 2.0                                     # fire pattern, screen px per image px
 # the money photo: the string's top, the point that ends up at the centre of the screen, scale and tilt
@@ -201,14 +206,14 @@ LOGZ = [(12.6, math.log(3.5)), (13.4, math.log(3.75)), (14.3, math.log(3.95)), (
         (25.3, math.log(1.1)), (26.5, math.log(1.25)), (27.8, math.log(1.2)), (30.55, math.log(1.2))]
 CX = [(12.6, 0.3), (14.4, 0.4), (16.0, 0.14), (17.6, 0.0), (19.0, 0.8), (20.5, 0.3), (21.8, -0.6),
       (22.6, -0.2), (23.6, 0.3), (25.0, 0.32)]
-CY = [(12.6, 0.05), (13.5, 0.0), (14.4, 0.09), (16.0, 0.04), (17.6, 0.2), (19.0, 0.9), (20.5, -0.4), (21.8, -0.9),
+CY = [(12.6, 1.3), (12.9, 0.95), (13.3, 0.3), (13.8, 0.03), (14.4, 0.09), (16.0, 0.04), (17.6, 0.2), (19.0, 0.9), (20.5, -0.4), (21.8, -0.9),
       (22.6, -0.75), (23.6, -0.95), (25.0, -0.85)]
 ROLLB = [(12.6, 0), (13.6, 0.025), (14.6, -0.02), (16.0, 0.04), (17.6, 0.1), (19.5, -0.06), (21.0, 0.08), (22.6, 0.02),
          (23.6, 0.0), (30.55, 0.0)]
 # the eye with bars (reference photo): photo px per eye unit, the photo px at the eye's centre
 PRI_U, PRI_E = 400.0, (690.0, 774.0)
 PRI_BAR = 0.3                                    # its middle bar, in eye units
-T_REVEAL = 12.72                                 # the string becomes the bar, the cell decodes in around it
+T_REVEAL = 12.72                                 # the camera reaches the cell: dust starts to show in its light
 # the bust comes back at the end: bust photo px per eye unit, and the px of its left eye (where it cries)
 BEATS = [(26.5, 0.8), (27.45, 0.48)]             # heart hits: the box's light pulses
 # the ring box (reference image px): lid hinge, how deep it lies closed, how tall it stands open, its sides
@@ -231,6 +236,7 @@ class Film:
         self.setup_bust()
         here = os.path.dirname(os.path.abspath(__file__))
         self.fire = np.asarray(Image.open(os.path.join(here, "assets", "fire.png")).convert("RGB"), np.float32) / 255.0
+        self.skull = np.asarray(Image.open(os.path.join(here, "assets", "skull_xray.png")).convert("L"), np.float32) / 255.0
         self.money = np.asarray(Image.open(os.path.join(here, "assets", "money.png")).convert("RGBA"), np.float32) / 255.0
         self.prison = np.asarray(Image.open(os.path.join(here, "assets", "eye_bars.png")).convert("L"), np.float32) / 255.0
         self.build_code(rng)
@@ -308,21 +314,27 @@ class Film:
         cx0 = PRI_BAR - (sx - 540) / (EU * Z0)
         self.CXK = [(T_B, cx0), (13.6, PRI_BAR)] + [k for k in CX if k[0] >= 14.4]
         cy0 = ckey(T_B, CY)
-        self.string_y0 = cy0 - (self.snap_hang[1] - 960) / (EU * Z0)
+        self.string_y0 = cy0 - (self.snap_hang[1] + self.pan_since_snap(T_B) - 960) / (EU * Z0)
         self.string_k = 1.0 / (EU * Z0)
-        self.impacts = [(T_SNAP, 6.0), (T_REVEAL + 0.05, 5.0)]
+        self.impacts = [(T_SNAP, 6.0)]
         rng = np.random.default_rng(23)
         n = 140
         self.dust = dict(x=rng.uniform(-0.3, 0.95, n), y=rng.uniform(-0.6, 0.6, n), vx=rng.normal(0.01, 0.02, n),
                          vy=rng.uniform(-0.05, 0.02, n), ph=rng.uniform(0, 6.3, n))
 
     def setup_tape(self):
-        # the thread hangs straight; once the camera has panned, the money hangs in the middle of the frame
+        # the tape hangs straight; once the camera has panned, the money hangs in the middle of the frame
+        k = ckey(11.5, SKULL_K)
         off = (MONEY_C[0] - MONEY_KNOT[0], MONEY_C[1] - MONEY_KNOT[1])
-        self.TX = [(0, 540), (9.6, 540), (10.6, 540 - off[0] * K_M0), (12.6, 540 - off[0] * K_M0)]
-        P = 960 - (EMBER_Y + TAPE_L[-1][1] + off[1] * K_M0)
-        self.PAN = [(0, 0), (9.35, 0), (9.9, 0.12 * P), (10.6, 0.58 * P), (11.3, 0.93 * P), (12.6, P)]
-        # the money only exists on the thread once its end is out of frame
+        hxf = 540 - off[0] * K_M0 - (TAPE0[0] - SKULL_E[0]) * k
+        self.HXS = [(6.8, 540), (8.6, 545), (10.6, hxf), (12.6, hxf)]
+        self.PAN = [(0, 0)]
+        y0 = ckey(11.5, SKULL_HY) + (TAPE0[1] - SKULL_E[1]) * k
+        P = 960 - (y0 + TAPE_L[-1][1] + off[1] * K_M0)
+        # ... and after the snap the camera keeps going down after the falling money
+        self.PAN = [(0, 0), (9.35, 0), (9.9, 0.12 * P), (10.6, 0.58 * P), (11.3, 0.93 * P), (T_SNAP, P),
+                    (12.25, P - 330), (T_B, P - 780)]
+        # the money only exists on the tape once its end is out of frame
         self.t_att = 12.0
         for tt in np.arange(9.2, 10.4, 0.01):
             _, hang = self.tape(tt)
@@ -356,30 +368,29 @@ class Film:
             col[r, c] = np.where((f > 0.55)[:, None], HOT, RED)
             gl[r, c] = np.where(f > 0.7, CI["*"], np.where(f > 0.35, CI["'"], CI["."]))
             solid[r, c] = True
-        # the last ember, where the head was: the thread will fall from it
-        g = float(sstep(8.1, 8.5, t)) * (1 - float(sstep(9.6, 10.0, t)))
-        if g > 0:
-            ex, ey = ckey(t, self.TX), EMBER_Y + ckey(t, self.PAN)
-            d = np.hypot(FGX - ex, (FGY - ey) * 0.8)
-            pul = 0.8 + 0.2 * math.sin(t * 9)
-            glow = g * pul * np.clip(1 - d / 34, 0, 1)
-            on = glow > 0.08
-            b[on] = np.maximum(b[on], glow[on]); col[on] = np.where((d[on] < 10)[:, None], PALE, HOT)
-            gl[on & (d < 10)] = CI["@"]; solid |= on
+
+    def skull_cam(self, t):
+        return ckey(t, SKULL_K), ckey(t, self.HXS), ckey(t, SKULL_HY) + ckey(t, self.PAN), 0.0
+
+    def skull_to_screen(self, PX, PY, t):
+        k, hx, hy, roll = self.skull_cam(t)
+        dx, dy = (PX - SKULL_E[0]) * k, (PY - SKULL_E[1]) * k
+        cr, sr = math.cos(roll), math.sin(roll)
+        return hx + dx * cr - dy * sr, hy + dx * sr + dy * cr
 
     def tape(self, t):
-        """the thread unspooling from the last ember, down out of frame: screen points, hanging end"""
+        """the tape running on from the curls in the x-ray, down out of frame: screen points, hanging end"""
         L = ckey(t, TAPE_L) if t > 9.2 else 0.0
         if L <= 5:
             return None, None
         s = np.concatenate([np.arange(0, min(L, 700), 0.6), np.arange(700, L, 2.5)])
-        k = 1.55
+        k = ckey(t, SKULL_K)
         A = 34 * k * np.exp(-s / 260)
         ph = s / (17 * k) + 1.2 + 0.6 * math.sin(t * 1.3)
         grow = 1 - np.exp(-s / 12)
-        X0, Y0 = ckey(t, self.TX), EMBER_Y + ckey(t, self.PAN)
-        X = X0 + A * np.sin(ph) * grow
-        Y = Y0 + s + A * (np.cos(ph) - math.cos(1.2)) * grow
+        X0, Y0 = self.skull_to_screen(np.array([TAPE0[0]]), np.array([TAPE0[1]]), t)
+        X = X0[0] + A * np.sin(ph) * grow
+        Y = Y0[0] + s + A * (np.cos(ph) - math.cos(1.2)) * grow
         return (X, Y), (X[-1], Y[-1])
 
     def money_pose(self, t, hang):
@@ -396,7 +407,7 @@ class Film:
         cx, cy = hang[0] + (ox * c - oy * s) * K_M0, hang[1] + (ox * s + oy * c) * K_M0
         if tau > 0:
             cx += 70 * tau
-            cy += 0.5 * MONEY_G * tau ** 2 + 120 * tau
+            cy += 0.5 * MONEY_G * tau ** 2 + 120 * tau + self.pan_since_snap(t)
         return cx, cy, K_M0, phi, hang
 
     def money_texture(self, AX, AY):
@@ -421,6 +432,9 @@ class Film:
             mb, mc, on = self.money_texture(AX, AY)
             fade = 0.35 + 0.65 * (k + 1) / len(subs)
             b[on] = mb[on] * fade; col[on] = mc[on]; gl[on] = 0; solid[on] = True
+
+    def pan_since_snap(self, t):
+        return ckey(t, self.PAN) - ckey(T_SNAP, self.PAN) if t > T_SNAP else 0.0
 
     def string_end(self, t):
         """after the snap the tape's end springs back up: how far, in screen px"""
@@ -478,6 +492,28 @@ class Film:
             gl = np.where(on & (rb <= fill), dots, gl)
             solid |= ~burnt & (on | (inner > 0.05))
 
+        # the x-ray, revealed where the fire has burnt through; the reels spin, a scan line runs down it
+        if t > 7.0:
+            k, hx, hy, rl = self.skull_cam(t)
+            c2, s2 = math.cos(rl), math.sin(rl)
+            ex, ey = SX - hx, SY - hy
+            PX = SKULL_E[0] + (ex * c2 + ey * s2) / k
+            PY = SKULL_E[1] + (-ex * s2 + ey * c2) / k
+            ink = self.bust_sample(self.skull, PX, PY)
+            scan = ((t - 7.3) * 520) % 1500 - 150
+            bb = ink * (1.05 + 0.1 * math.sin(t * 9)) + 0.35 * ink * np.exp(-((PY - scan) / 22) ** 2)
+            spin = t * 2.5 + (0.004 * ckey(t, TAPE_L) if t > 9.2 else 0.0)
+            for (rx, ry), rr in REELS:
+                d = np.hypot(PX - rx, PY - ry)
+                a_ = np.arctan2(PY - ry, PX - rx) - spin
+                spoke = (d < rr * 0.9) & (d > 11) & (np.cos(3 * a_) > 0.93)
+                bb = np.where(spoke, 0.85, bb)
+            on = burnt & (bb > 0.035)
+            bb = np.clip(bb, 0, 1)
+            b = np.where(on, bb, b)
+            col = np.where(on[..., None], redmap(bb), col)
+            solid |= burnt & (ink > 0.03)
+
         # fire: the pixel flames climb from the bottom, scrolling up, burn the face off, then die
         if 4.95 < t < 9.0:
             front = 1980 - 2200 * float(smoother(5.0, 6.6, t)) + 160 * (fbm(SX / 260, np.full(SX.shape, t * 0.6), 2, 3) - 0.5)
@@ -523,7 +559,7 @@ class Film:
             if t >= self.t_att:
                 self.money_layer(b, col, gl, solid, t, SX, SY, hang)
             if t > T_SNAP:
-                ye = self.snap_hang[1] - self.string_end(t)
+                ye = self.snap_hang[1] + self.pan_since_snap(t) - self.string_end(t)
                 keep = Y < ye
                 X, Y = X[keep], Y[keep]
                 tau = t - T_SNAP
@@ -532,7 +568,7 @@ class Film:
                     X = X + curl
                 fl = math.exp(-tau / 0.09)
                 if fl > 0.05:                                    # the snap: a flash where it broke
-                    d = np.hypot(SX - self.snap_hang[0], (SY - self.snap_hang[1]) * 0.8)
+                    d = np.hypot(SX - self.snap_hang[0], (SY - self.snap_hang[1] - self.pan_since_snap(t)) * 0.8)
                     on = d < 90 * fl
                     b = np.where(on, np.maximum(b, fl * (1 - d / (90 * fl + 1e-6))), b)
                     col = np.where(on[..., None], PALE, col); gl = np.where(on & (d < 30), CI["*"], gl); solid |= on
@@ -609,7 +645,7 @@ class Film:
         b, inside = self.prison_photo(X, Y, t)
         # close up it's only the cell: the eye around it stays dark until the camera pulls back
         vig = 1 - float(smoother(14.4, 15.8, t))
-        e = ((X - 0.29) / 0.82) ** 2 + ((Y - 0.04) / 0.62) ** 2
+        e = ((X - 0.29) / 0.82) ** 2 + ((Y - 0.04) / 0.75) ** 2
         b = b * (1 - vig * sstep(0.75, 1.15, e))
         # a bare bulb swings above the cell: its light slides back and forth over the bars and hands
         lx = PRI_BAR + 0.34 * math.sin(t * 2.4)
@@ -617,10 +653,8 @@ class Film:
         cw = 1 - float(smoother(14.6, 15.6, t))
         b = np.clip(b * (1 + (lamp - 1) * cw), 0, 1)
         # reveal: outward from the bar the string turned into
-        rv = T_REVEAL + 0.1 + 0.8 * np.clip(np.hypot((X - PRI_BAR) / 0.7, Y / 1.1), 0, 1.3) ** 0.85 + 0.08 * self.rand
-        bar = (np.abs(X - PRI_BAR) < 0.03) & (Y > -0.45) & (Y < 0.55)
-        rv = np.where(bar, T_REVEAL, rv)
-        on = inside & (t >= rv)
+        rv = np.full(shape, -1.0)                                   # it's just there, under the camera
+        on = inside
         b = np.where(on, b, 0.0)
         col = redmap(b)
         gl = np.zeros(shape, np.int64)
@@ -629,12 +663,12 @@ class Film:
         gl = np.where(dec, rng.choice(PRINTABLE, shape), gl)
         b = np.where(dec, 0.8, b); col = np.where(dec[..., None], HOT, col)
         # the string, swinging back from the snap, thickening into the bar
-        if t < T_REVEAL + 0.25:
+        if t < 13.6:
             Z = math.exp(ckey(t, LOGZ))
             ye = self.string_y0 + self.string_end(t) * self.string_k
             sw = 0.004 * math.sin(t * 9) * math.exp(-(t - T_SNAP) / 0.6)
-            k = float(smoother(T_REVEAL - 0.1, T_REVEAL + 0.15, t))
-            hw = max(0.0016, 0.5 * FCW / (EU * Z)) + 0.012 * k
+            k = 0.0
+            hw = max(0.0016, 0.5 * FCW / (EU * Z))
             st = (np.abs(X - PRI_BAR - sw * (1 - k)) < hw) & (Y > ye) & ~on
             b = np.where(st, 0.9 - 0.3 * k, b); col = np.where(st[..., None], HOT, col)
             gl = np.where(st & (k < 0.5), CI["|"], gl)
@@ -726,7 +760,7 @@ class Film:
             pb, pc, pg, ps = self.prison_layer(X, Y, t, fi)
             r = np.hypot(X * 0.8, Y * 1.4)
             _, ins = self.prison_photo(X, Y, t)
-            sw_w = np.where(ins, 16.45 + 0.85 * (1 - np.clip(r / 2.4, 0, 1)) + 0.12 * self.rand, 0.0)
+            sw_w = np.where(ins, 16.45 + 0.85 * (1 - np.clip(r / 2.4, 0, 1)) + 0.12 * self.rand, 16.45)
         if t < 24.3 and (t >= 16.37 or (sw_w <= t).any()):
             b, folds = self.flesh(X, Y, t, Z)
             col = redmap(b); gl = np.zeros(shape, np.int64); solid = folds | (b > 0.03)
