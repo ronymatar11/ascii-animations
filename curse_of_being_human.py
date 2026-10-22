@@ -7,10 +7,10 @@ humans pursue peace: dots fill it in, the camera moves in on the head ->
 yet manufacture chaos: pixel flames (from a reference) climb over it ->
 they fear death: the fire burns away to an x-ray skull with a cassette for a brain (from a reference) ->
 yet waste their lives: the tape unspools, the camera follows it down to money on a string (from a reference) ->
-they demand freedom: the string snaps, the money drops out of frame -> iron bars slam down one by one,
-the first over the string -> then construct their: hands grab them -> own prisons: pull back, the prison
-is inside an eye -> perhaps the greatest flaw in your design: the eye is one of a wall of eyes, all turning
-to look at you -> is not your mortality: they all close -> it is your extraordinary ability: they give way to two hands
+they demand freedom: the string snaps, the money drops out of frame; the string thickens into a bar and
+the cell decodes in around it (from a reference photo) -> then construct their: the hands rattle the bars ->
+own prisons: pull back, the prison is inside an eye -> perhaps the greatest flaw in your design: the eye is
+one of a wall of eyes, all turning to look at you -> is not your mortality: they all close -> it is your extraordinary ability: they give way to two hands
 holding a closed ring box (from a reference) -> to remain alive: on the hit the lid springs open, an Esc key
 inside, its light pulsing with the heart -> without ever truly living: Esc is pressed, the screen switches off.
 
@@ -164,34 +164,12 @@ def lids(xl, op):
     y_up = y_low + (0.58 * sx ** 0.7 + 0.02 - 0.04 * xl - y_low) * op
     return sx, y_low, y_up
 
-FS = 0.2                                          # fist units -> eye units
-def fist_sdf(x, y, z, clench):
-    """a hand gripping a vertical bar (axis = y, radius BAR_R / FS) from behind and to the left;
-    fingers wrap round the front of the bar, the thumb crosses over them"""
-    rg = BAR_R / FS + 0.08
-    d = _cap(x, y, z, (-0.33, -0.22, -0.30), (-0.62, -1.6, -1.0), 0.17, 0.2)             # forearm
-    pal = _ell(x + 0.30, y + 0.02, z + 0.24, 0.13, 0.36, 0.24)                          # palm, behind
-    d = smin(d, pal, 0.1)
-    end = 0.75 + 0.25 * clench
-    for i, (r, ln) in enumerate(((0.082, 1.0), (0.086, 1.06), (0.08, 1.0), (0.07, 0.86))):
-        yi = 0.25 - 0.165 * i
-        ph = np.array([-2.5, -1.45, -0.45, -0.45 + end * ln])                          # around the bar
-        pts = [(rg * math.sin(a_), yi - 0.02 * k, rg * math.cos(a_)) for k, a_ in enumerate(ph)]
-        pts[0] = (-0.27, yi + 0.01, -0.33)
-        f = _cap(x, y, z, pts[0], pts[1], r * 1.08, r)
-        f = smin(f, _cap(x, y, z, pts[1], pts[2], r, r * 0.95), 0.03)
-        f = smin(f, _cap(x, y, z, pts[2], pts[3], r * 0.95, r * 0.85), 0.03)
-        d = smin(d, f, 0.025)
-    th = smin(_cap(x, y, z, (-0.32, -0.3, -0.05), (-0.16, -0.12, rg + 0.05), 0.1, 0.09),
-              _cap(x, y, z, (-0.16, -0.12, rg + 0.05), (0.06, 0.05, rg + 0.07), 0.09, 0.075), 0.03)
-    return smin(d, th, 0.04)
-
 # ------------------------------------------------------------------ scene A camera (photo px)
 # the bust photo: screen px per photo px, where it sits, the point between the eyes
 # the head is already moving at the first frame: it drifts in from up and to the left, tilted, and
 # settles into its pose by "Humans pursue peace"
 BUST_K = [(0, 1.62), (1.4, 1.88), (2.7, 2.1), (5.0, 2.65), (7.4, 2.9), (9.0, 3.1)]
-BUST_X = [(0, 330), (1.4, 470), (2.7, 540), (9.0, 540)]
+BUST_X = [(0, 330), (1.4, 470), (2.7, 540), (4.6, 520), (6.4, 552), (9.0, 540)]
 HY = [(0, 560), (1.4, 665), (2.7, 725), (5.0, 860), (7.4, 900), (9.0, 920)]
 ROLL = [(0, -0.2), (1.4, -0.05), (2.7, 0.02), (5.0, -0.02), (7.4, 0.02), (9.2, 0.0), (12.6, 0.0)]
 BUST_E = (255.0, 290.0)
@@ -223,18 +201,20 @@ def sample(img, PX, PY):
 
 # ------------------------------------------------------------------ scene B camera (eye units)
 EU = 330.0
-LOGZ = [(12.6, math.log(6.5)), (13.3, math.log(6.4)), (14.6, math.log(5.6)), (15.6, math.log(2.6)),
+LOGZ = [(12.6, math.log(3.5)), (13.4, math.log(3.4)), (14.4, math.log(3.15)), (15.6, math.log(1.75)),
         (16.7, math.log(1.0)), (17.6, math.log(0.5)), (18.8, math.log(0.36)), (20.0, math.log(0.33)),
         (21.5, math.log(0.31)), (22.5, math.log(0.38)), (23.6, math.log(0.98)), (24.6, math.log(1.06)),
         (25.3, math.log(1.1)), (26.5, math.log(1.25)), (27.8, math.log(1.2)), (30.55, math.log(1.2))]
-CX = [(12.6, 0.08), (14.6, 0.08), (16.0, 0.05), (17.6, 0.0), (19.0, 0.8), (20.5, 0.3), (21.8, -0.6),
+CX = [(12.6, 0.3), (14.4, 0.31), (16.0, 0.12), (17.6, 0.0), (19.0, 0.8), (20.5, 0.3), (21.8, -0.6),
       (22.6, -0.2), (23.6, 0.3), (25.0, 0.32)]
-CY = [(12.6, 0.08), (14.6, 0.06), (16.0, 0.0), (17.6, 0.2), (19.0, 0.9), (20.5, -0.4), (21.8, -0.9),
+CY = [(12.6, 0.05), (14.4, 0.05), (16.0, 0.04), (17.6, 0.2), (19.0, 0.9), (20.5, -0.4), (21.8, -0.9),
       (22.6, -0.75), (23.6, -0.95), (25.0, -0.85)]
 ROLLB = [(12.6, 0), (14.6, 0.0), (16.0, 0.04), (17.6, 0.1), (19.5, -0.06), (21.0, 0.08), (22.6, 0.02),
          (23.6, 0.0), (30.55, 0.0)]
-BAR_DX, BAR_R = 0.16, 0.016
-BAR_TIP, BAR_FALL = -0.30, 0.17                  # where the bars' ends land, how long each takes to fall
+# the eye with bars (reference photo): photo px per eye unit, the photo px at the eye's centre
+PRI_U, PRI_E = 400.0, (690.0, 774.0)
+PRI_BAR = 0.3                                    # its middle bar, in eye units
+T_REVEAL = 12.72                                 # the string becomes the bar, the cell decodes in around it
 # the bust comes back at the end: bust photo px per eye unit, and the px of its left eye (where it cries)
 BEATS = [(26.5, 0.8), (27.45, 0.48)]             # heart hits: the box's light pulses
 # the ring box (reference image px): lid hinge, how deep it lies closed, how tall it stands open, its sides
@@ -242,10 +222,11 @@ HINGE, LID_D, LID_H, LID_TOP = 510, 135, 280, 230
 LID_X, BASE_X = (372, 612), (368, 630)
 KEY_BOX, KEY_C = (395, 600, 505, 645), (497, 560)
 T_OPEN, T_PRESS, T_OFF = 26.45, 29.0, 29.12      # the lid opens on the hit; Esc is pressed; the screen goes off
-BOXCAM_X = [(22.6, 500), (24.5, 497), (26.4, 498), (27.3, 492), (27.9, 495), (28.9, 497), (30.55, 497)]
-BOXCAM_Y = [(22.6, 650), (24.5, 645), (26.4, 640), (27.3, 500), (27.9, 520), (28.9, 568), (30.55, 570)]
-BOXCAM_Z = [(22.6, math.log(3.3)), (24.5, math.log(3.0)), (26.4, math.log(2.85)), (27.3, math.log(1.05)),
-            (27.9, math.log(1.15)), (28.9, math.log(2.6)), (30.55, math.log(2.75))]
+LID_T = 0.95                                     # how long the lid takes to open
+BOXCAM_X = [(22.6, 500), (24.5, 497), (26.4, 498), (27.4, 496), (28.4, 494), (28.95, 497), (30.55, 497)]
+BOXCAM_Y = [(22.6, 650), (24.5, 645), (26.4, 640), (27.4, 600), (28.4, 525), (28.95, 548), (30.55, 552)]
+BOXCAM_Z = [(22.6, math.log(3.3)), (24.5, math.log(3.0)), (26.4, math.log(2.85)), (27.4, math.log(2.45)),
+            (28.4, math.log(1.45)), (28.95, math.log(1.7)), (30.55, math.log(1.8))]
 
 
 class Film:
@@ -258,11 +239,12 @@ class Film:
         self.skull = np.asarray(Image.open(os.path.join(here, "assets", "skull_xray.png")).convert("L"), np.float32) / 255.0
         self.fire = np.asarray(Image.open(os.path.join(here, "assets", "fire.png")).convert("RGB"), np.float32) / 255.0
         self.money = np.asarray(Image.open(os.path.join(here, "assets", "money.png")).convert("RGBA"), np.float32) / 255.0
+        self.prison = np.asarray(Image.open(os.path.join(here, "assets", "eye_bars.png")).convert("L"), np.float32) / 255.0
         self.build_code(rng)
         # the fire eats the face from the bottom up
         self.T_burn = 7.25 + 1.2 * np.clip((1750 - FGY) / 1500, 0, 1) + 0.35 * (fbm(FGX / 150, FGY / 150, 3, 19) - 0.5)
         self.setup_tape()
-        self.setup_bars(rng)
+        self.setup_prison()
         self.setup_wall(rng)
         self.setup_box()
 
@@ -339,33 +321,19 @@ class Film:
             if hang is not None and hang[1] > 2010:
                 self.t_att = tt; break
 
-    def setup_bars(self, rng):
-        # the string the money hung from becomes the line the first bar comes down over
+    def setup_prison(self):
+        # the string the money hung from lines up with the middle bar in the photo
         _, self.snap_hang = self.tape(T_SNAP)
         X, Y = self.tape(T_B)[0]
         vis = (Y > 0) & (Y < H)
         sx = float(X[vis].mean()) if vis.any() else self.snap_hang[0]
         Z0 = math.exp(ckey(T_B, LOGZ))
-        cx0 = (540 - sx) / (EU * Z0)
-        self.CXK = [(T_B, cx0), (13.7, BAR_DX / 2)] + [k for k in CX if k[0] >= 14.6]
+        cx0 = PRI_BAR - (sx - 540) / (EU * Z0)
+        self.CXK = [(T_B, cx0), (13.6, PRI_BAR)] + [k for k in CX if k[0] >= 14.4]
         cy0 = ckey(T_B, CY)
         self.string_y0 = cy0 - (self.snap_hang[1] - 960) / (EU * Z0)
         self.string_k = 1.0 / (EU * Z0)
-        # the bars slam down: the one over the string first, then its neighbours, then the rest off-screen
-        order = {0: 12.72, 1: 12.97, -1: 13.2, 2: 13.42}
-        self.bar_t = [order.get(k, 13.5 + 0.03 * abs(k)) for k in range(-8, 9)]
-        self.spark_rng = [[(rng.uniform(-0.35, 0.35), rng.uniform(0.15, 0.7), rng.uniform(0.25, 0.55)) for _ in range(18)]
-                          for _ in range(17)]
-        self.impacts = [(T_SNAP, 6.0)] + [(order[k] + BAR_FALL, 9.0) for k in order]
-
-    def bar_tip(self, k, t):
-        tk = self.bar_t[k + 8]
-        x = min(max((t - tk) / BAR_FALL, 0.0), 1.0)
-        top = 0.8
-        if x < 1:
-            return top - (top - BAR_TIP) * x * x
-        a = t - tk - BAR_FALL
-        return BAR_TIP + 0.022 * math.exp(-a / 0.07) * abs(math.sin(a * 45))
+        self.impacts = [(T_SNAP, 6.0), (T_REVEAL + 0.05, 5.0)]
 
     def skull_cam(self, t):
         return ckey(t, SKULL_K), ckey(t, self.HXS), ckey(t, SKULL_HY) + ckey(t, self.PAN), ckey(t, ROLL)
@@ -451,18 +419,9 @@ class Film:
 
         # the bust: a red rim light traces it, dots fill it in, then firelight
         if t < 8.9:
-            k = ckey(t, BUST_K) * (1 + 0.012 * math.sin(t * 1.6))          # breathing
+            k = ckey(t, BUST_K)
             PX = BUST_E[0] + (dx * cr + dy * sr) / k
             PY = BUST_E[1] + (-dx * sr + dy * cr) / k
-            # the head turns a little, left and right, nodding: a cylindrical warp of the photo, the head
-            # turning more than the shoulders, so it reads as a head in space and not a flat picture
-            hm = 1 - float(smoother(6.5, 7.6, t))
-            yaw = hm * (0.17 * math.sin(t * 0.75 + 0.6) + 0.05 * math.sin(t * 1.9)) - 0.18 * (1 - float(smoother(0.0, 2.7, t)))
-            pitch = hm * 0.035 * math.sin(t * 1.1 + 2)
-            w = np.clip((560 - PY) / 200, 0.25, 1.0)
-            u = np.clip((PX - BUST_E[0]) / 300, -0.999, 0.999)
-            PX = BUST_E[0] + 300 * np.sin(np.arcsin(u) - yaw * w)
-            PY = PY - pitch * 150 * np.sqrt(1 - u ** 2) * w
             rim = self.bust_sample(self.bust_rim, PX, PY)
             inner = self.bust_sample(self.bust_in, PX, PY)
             glow = self.bust_sample(self.bust_glow, PX, PY)
@@ -605,103 +564,51 @@ class Film:
     def hero_open(self, t):
         return 1 - float(smoother(self.eye_close[0], self.eye_close[0] + 0.2, t))
 
-    def cell(self, X, Y, t, fi):
-        """inside the prison: the snapped string, then iron bars slam down one by one, a crossbar, two fists"""
+    def prison_photo(self, X, Y, t):
+        """the eye with bars (reference photo), sampled at eye units; the hands rattle the bars on the hit"""
+        PXp = PRI_E[0] + X * PRI_U
+        PYp = PRI_E[1] - Y * PRI_U
+        a = t - 14.0
+        if 0 <= a < 0.9:
+            cell = (np.abs(X - 0.3) < 0.62) & (Y > -0.5) & (Y < 0.6)
+            PXp = PXp + cell * 7 * math.exp(-a / 0.22) * math.sin(a * 38)
+        lum = sample(self.prison, PXp, PYp)
+        inside = (PXp >= 0) & (PXp < self.prison.shape[1] - 1) & (PYp >= 0) & (PYp < self.prison.shape[0] - 1)
+        flick = 0.93 + 0.07 * math.sin(t * 13) * math.sin(t * 7.3)          # a bare bulb somewhere
+        b = np.clip((lum - 0.025) / 0.7, 0, 1) ** 0.8 * flick
+        return b, inside
+
+    def prison_layer(self, X, Y, t, fi):
+        """the string becomes the middle bar, the cell decodes in around it, the camera pulls back to the eye"""
         shape = X.shape
-        b = np.zeros(shape); col = np.zeros(shape + (3,), np.float32)
-        gl = np.zeros(shape, np.int64); solid = np.zeros(shape, bool)
-        Z = math.exp(ckey(t, LOGZ))
-        px = 1.0 / (EU * Z)                                       # eye units per screen px
-        # the string, still swinging back from the snap, until the first bar comes down over it
-        if t < self.bar_t[0] + 0.3:
+        b, inside = self.prison_photo(X, Y, t)
+        # close up it's only the cell: the eye around it stays dark until the camera pulls back
+        vig = 1 - float(smoother(14.4, 15.8, t))
+        e = ((X - 0.29) / 0.82) ** 2 + ((Y - 0.04) / 0.62) ** 2
+        b = b * (1 - vig * sstep(0.75, 1.15, e))
+        # reveal: outward from the bar the string turned into
+        rv = T_REVEAL + 0.1 + 0.8 * np.clip(np.hypot((X - PRI_BAR) / 0.7, Y / 1.1), 0, 1.3) ** 0.85 + 0.08 * self.rand
+        bar = (np.abs(X - PRI_BAR) < 0.03) & (Y > -0.45) & (Y < 0.55)
+        rv = np.where(bar, T_REVEAL, rv)
+        on = inside & (t >= rv)
+        b = np.where(on, b, 0.0)
+        col = redmap(b)
+        gl = np.zeros(shape, np.int64)
+        dec = inside & (t > rv - 0.08) & (t < rv)
+        rng = np.random.default_rng(fi + 5)
+        gl = np.where(dec, rng.choice(PRINTABLE, shape), gl)
+        b = np.where(dec, 0.8, b); col = np.where(dec[..., None], HOT, col)
+        # the string, swinging back from the snap, thickening into the bar
+        if t < T_REVEAL + 0.25:
+            Z = math.exp(ckey(t, LOGZ))
             ye = self.string_y0 + self.string_end(t) * self.string_k
             sw = 0.004 * math.sin(t * 9) * math.exp(-(t - T_SNAP) / 0.6)
-            on = (np.abs(X - sw) < max(0.0016, 0.5 * FCW * px)) & (Y > ye)
-            b = np.where(on, 0.9, b); col = np.where(on[..., None], HOT, col); gl = np.where(on, CI["|"], gl); solid |= on
-        rr = max(BAR_R, 0.55 * FCW * px)
-        for k in range(-8, 9):
-            tk = self.bar_t[k + 8]
-            if t < tk: continue
-            xk = k * BAR_DX
-            if np.abs(X - xk).min() > rr: continue
-            tip = self.bar_tip(k, t)
-            dxn = (X - xk) / rr
-            nz = np.sqrt(np.clip(1 - dxn ** 2, 0, 1))
-            cap = tip + rr * (1 - nz) * 0.9                       # rounded end
-            on = (np.abs(dxn) < 1) & (Y > cap)
-            if not on.any(): continue
-            rust = fbm(Y * 22 + k * 7, dxn * 0.6 + k, 3, 41)
-            diff = np.clip(-0.5 * dxn + 0.85 * nz, 0, 1)
-            spec = np.exp(-((dxn + 0.32) / 0.13) ** 2)
-            bb = np.clip((0.2 + 0.72 * diff) * (0.72 + 0.45 * rust) + 0.6 * spec * (rust > 0.35), 0, 1)
-            falling = t < tk + BAR_FALL
-            g = SHADE[np.clip((bb * len(SHADE)).astype(int), 0, len(SHADE) - 1)]
-            g = np.where(spec > 0.5, CI["|"], g)
-            b = np.where(on, bb, b); col = np.where(on[..., None], redmap(bb), col)
-            col = np.where((on & (spec > 0.5))[..., None], np.array([1.0, 0.75, 0.68]), col)
-            gl = np.where(on, g, gl); solid |= on
-            if falling:                                           # speed lines beside a falling bar
-                sl = ((np.abs(np.abs(X - xk) - rr * 1.7) < 0.6 * FCW * px) & (Y > tip + 0.05) &
-                      (Y < tip + 0.35) & (self.rand > 0.35))
-                b = np.where(sl, 0.45, b); col = np.where(sl[..., None], RED, col); gl = np.where(sl, CI["|"], gl); solid |= sl
-        # impact: sparks and dust where each bar lands
-        for k in range(-8, 9):
-            tl = self.bar_t[k + 8] + BAR_FALL
-            age = t - tl
-            if not (0 <= age < 0.6): continue
-            xk = k * BAR_DX
-            if abs(xk - X.mean()) > (X.max() - X.min()): continue
-            pr = self.spark_rng[k + 8]
-            for (vx, vy, life) in pr:
-                if age > life: continue
-                xs = xk + vx * age
-                ys = BAR_TIP + vy * age - 1.6 * age ** 2
-                d = np.hypot((X - xs) / (FCW * px * 0.8), (Y - ys) / (FCH * px * 0.8))
-                on = d < 1
-                if on.any():
-                    lv = 1 - age / life
-                    b = np.where(on, np.maximum(b, lv), b); col = np.where(on[..., None], np.where(lv > 0.5, PALE, HOT), col)
-                    gl = np.where(on, CI["*"] if lv > 0.5 else CI["."], gl); solid |= on
-            dust = (np.abs(Y - BAR_TIP) < 0.012 + 0.05 * age) & (np.abs(X - xk) < 0.02 + 0.25 * age) & (self.rand < 0.5 * (1 - age / 0.6))
-            b = np.where(dust & ~solid, 0.35, b); col = np.where((dust & ~solid)[..., None], RED, col)
-            gl = np.where(dust & ~solid, CI["~"], gl); solid |= dust
-        # the crossbar slams in on the hit
-        xe = -1.6 + 3.1 * float(np.clip((t - 13.95) / 0.09, 0, 1)) ** 2
-        if xe > -1.6:
-            dyn = (Y + 0.24) / 0.014
-            on = (np.abs(dyn) < 1) & (X < xe)
-            nz = np.sqrt(np.clip(1 - dyn ** 2, 0, 1))
-            bb = np.clip(0.2 + 0.6 * np.clip(0.55 * dyn + 0.8 * nz, 0, 1) + 0.35 * np.exp(-((dyn - 0.35) / 0.18) ** 2), 0, 1)
-            b = np.where(on, bb, b); col = np.where(on[..., None], redmap(bb), col)
-            gl = np.where(on & (np.abs(dyn - 0.35) < 0.2), CI["-"], np.where(on, 0, gl))
-            solid |= on
-        # two fists rise and grab the bars, the right one mirrored
-        yf = -0.95 + 0.93 * float(np.clip((t - 13.65) / 0.38, 0, 1)) ** 0.5
-        clench = float(smoother(13.9, 14.05, t))
-        if t > 13.65:
-            for xf, mir in ((0.0, 1.0), (BAR_DX, -1.0)):
-                xl, yl = mir * (X - xf) / FS, (Y - yf) / FS
-                m = (np.abs(xl) < 0.75) & (yl > -1.9) & (yl < 0.65)
-                if not m.any(): continue
-                o = np.stack([xl[m], yl[m], np.full(m.sum(), 2.0)], 1)
-                dv = np.array([0.0, 0.0, -1.0])
-                sdf = lambda a_, b_, c_: fist_sdf(a_, b_, c_, clench)
-                tt, hit = march(sdf, o, dv, 0.5, 4.5, steps=40, eps=0.003)
-                if not hit.any(): continue
-                ph = o[hit] + tt[hit, None] * dv
-                behind = (ph[:, 2] < 0) & (np.abs(ph[:, 0]) < BAR_R / FS)      # the bar is in front of the palm
-                n = normals(sdf, ph)
-                n[:, 0] *= mir
-                q = ph + normals(sdf, ph) * 0.06
-                ao = np.clip(sdf(q[:, 0], q[:, 1], q[:, 2]) / 0.06, 0, 1)
-                lam = np.clip(n @ unit(-0.55, 0.6, 0.6), 0, 1)
-                rim = np.clip(n @ unit(0.8, 0.2, -0.5), 0, 1) ** 2
-                bb = np.clip((0.06 + 0.85 * lam ** 1.2) * (0.4 + 0.6 * ao) + 0.5 * rim, 0, 1)
-                bb *= np.clip(1 + (ph[:, 1] + 0.4) * 0.8, 0.12, 1)               # the arm sinks into the dark
-                ix = np.nonzero(m)
-                hr, hc = ix[0][hit][~behind], ix[1][hit][~behind]
-                bb = bb[~behind]
-                b[hr, hc] = bb; col[hr, hc] = redmap(bb); gl[hr, hc] = 0; solid[hr, hc] = True
+            k = float(smoother(T_REVEAL - 0.1, T_REVEAL + 0.15, t))
+            hw = max(0.0016, 0.5 * FCW / (EU * Z)) + 0.012 * k
+            st = (np.abs(X - PRI_BAR - sw * (1 - k)) < hw) & (Y > ye) & ~on
+            b = np.where(st, 0.9 - 0.3 * k, b); col = np.where(st[..., None], HOT, col)
+            gl = np.where(st & (k < 0.5), CI["|"], gl)
+        solid = (b > 0.03) | dec
         return b, col, gl, solid
 
     def flesh(self, X, Y, t, Z=1.0):
@@ -770,7 +677,13 @@ class Film:
         cam = self.cam_b(t)
         X, Y = self.to_eye(SX, SY, cam)
         Z = cam[2]
-        if t < 24.3:
+        sw_w = np.full(shape, 99.0)
+        if t < 17.5:                                              # the eye with bars, from the photo
+            pb, pc, pg, ps = self.prison_layer(X, Y, t, fi)
+            r = np.hypot(X * 0.8, Y * 1.4)
+            _, ins = self.prison_photo(X, Y, t)
+            sw_w = np.where(ins, 16.45 + 0.85 * (1 - np.clip(r / 2.4, 0, 1)) + 0.12 * self.rand, 0.0)
+        if t < 24.3 and (t >= 16.37 or (sw_w <= t).any()):
             b, folds = self.flesh(X, Y, t, Z)
             col = redmap(b); gl = np.zeros(shape, np.int64); solid = folds | (b > 0.03)
             look = float(smoother(17.9, 18.02, t))                      # "flaw in your design": they all look at you
@@ -799,18 +712,26 @@ class Film:
                     gx = (0.12 * math.sin(t * 0.7 + ph) + 0.05 * (math.sin(t * 3.1 + ph) > 0.7)) * (1 - look)
                     gy = 0.05 * math.sin(t * 0.5 + 2 * ph) * (1 - look)
                 eb, ec, eg, es_, reg = self.paint_eye(xl, yl, op, gx, gy, t, self.rand[sl])
-                if i == 0 and t < 22.5:
+                if i == 0 and t < 22.5:                           # inside the hero eye: the cell from the photo
                     inside_h = (np.abs(xl) < EX) & (yl > lids(xl, op)[1]) & (yl < lids(xl, op)[2])
                     if inside_h.any():
-                        cb, cc, cg, csd = self.cell(X[sl], Y[sl], t, fi)
-                        eb = np.where(inside_h, cb, eb); ec = np.where(inside_h[..., None], cc, ec)
-                        eg = np.where(inside_h, cg, eg); es_ = np.where(inside_h, csd, es_ & ~inside_h)
+                        cb, _ = self.prison_photo(X[sl], Y[sl], t)
+                        eb = np.where(inside_h, cb, eb); ec = np.where(inside_h[..., None], redmap(cb), ec)
+                        eg = np.where(inside_h, 0, eg); es_ = np.where(inside_h, cb > 0.03, es_ & ~inside_h)
                 b[sl] = np.where(reg, eb, b[sl]); col[sl] = np.where(reg[..., None], ec, col[sl])
                 gl[sl] = np.where(reg, eg, gl[sl]); solid[sl] = np.where(reg, es_ | (eb > 0.03), solid[sl])
             col = np.where((b > 0.03)[..., None] & (col.max(-1, keepdims=True) == 0), redmap(b), col)
         else:
             b = np.zeros(shape); col = np.zeros(shape + (3,), np.float32)
             gl = np.zeros(shape, np.int64); solid = np.zeros(shape, bool)
+        if t < 17.5:                                              # the photo gives way to the wall, in code
+            ph = t < sw_w
+            b = np.where(ph, pb, b); col = np.where(ph[..., None], pc, col)
+            gl = np.where(ph, pg, gl); solid = np.where(ph, ps, solid)
+            dec = (t >= sw_w) & (t < sw_w + 0.08)
+            rng = np.random.default_rng(fi + 13)
+            gl = np.where(dec, rng.choice(PRINTABLE, shape), gl)
+            b = np.where(dec, 0.8, b); col = np.where(dec[..., None], HOT, col); solid |= dec
 
         # the wall of closed eyes gives way, in code, to hands holding a closed ring box
         if t > 22.6:
@@ -844,11 +765,11 @@ class Film:
         return cx, cy, z, 0.02 * math.sin(t * 0.8)
 
     def lid_angle(self, t):
-        x = (t - T_OPEN) / 0.42
+        x = (t - T_OPEN) / LID_T
         if x <= 0: return 0.0
-        if x < 1: return math.pi / 2 * (1 - (1 - x) ** 3)
-        a = t - T_OPEN - 0.42
-        return math.pi / 2 + 0.07 * math.exp(-a / 0.12) * math.sin(a * 30)
+        if x < 1: return math.pi / 2 * (1 - (1 - x) ** 2) ** 1.6       # eases off the hit, eases into place
+        a = t - T_OPEN - LID_T
+        return math.pi / 2 + 0.03 * math.exp(-a / 0.2) * math.sin(a * 14)
 
     def box_scene(self, SX, SY, t):
         shape = SX.shape
@@ -865,23 +786,28 @@ class Film:
         # the lid: closed it lies over the opening (we see its top), opening it swings up on its hinge
         th = self.lid_angle(t)
         ye = HINGE + LID_D * math.cos(th) - LID_H * math.sin(th)
-        if ye > HINGE + 1:                                       # its outside
-            m = (AX > BASE_X[0]) & (AX < BASE_X[1]) & (AY > HINGE) & (AY < ye)
+        # the box under the lid sits in its shadow until it's open
+        o = math.sin(min(th, math.pi / 2))
+        under = (AX > BASE_X[0]) & (AX < BASE_X[1]) & (AY > HINGE) & (AY < HINGE + LID_D + 20)
+        rgb = np.where(under[..., None], rgb * (0.3 + 0.7 * o), rgb)
+        lx0 = BASE_X[0] + (LID_X[0] - BASE_X[0]) * o                 # the lid's sides follow it round
+        lx1 = BASE_X[1] + (LID_X[1] - BASE_X[1]) * o
+        if ye > HINGE + 1:                                       # its outside: the same red card as the box
+            m = (AX > lx0) & (AX < lx1) & (AY > HINGE) & (AY < ye)
             f = np.clip((AY - HINGE) / (ye - HINGE), 0, 1)
-            face = np.stack([0.86 - 0.12 * f, 0.1 + 0.04 * (1 - f), 0.15 + 0.03 * (1 - f)], -1)
-            front = m & (AY > ye - 16)
-            face = np.where(front[..., None], np.array([0.62, 0.06, 0.1]), face)
-            edge = m & ((np.abs(AX - BASE_X[0]) < 2.5) | (np.abs(AX - BASE_X[1]) < 2.5) | (np.abs(AY - ye) < 2.5) |
-                        (np.abs(AY - (ye - 16)) < 1.5))
+            face = sample(self.box_img, AX, 668 + 70 * f) * (1.05 - 0.25 * f)[..., None] * (1 - 0.35 * o)
+            lip = m & (AY > ye - 16 * (1 - o))
+            face = np.where(lip[..., None], face * 0.7, face)
+            edge = m & ((np.abs(AX - lx0) < 2.5) | (np.abs(AX - lx1) < 2.5) | (np.abs(AY - ye) < 2.5))
             face = np.where(edge[..., None], 0.05, face)
             rgb = np.where(m[..., None], face, rgb)
         elif ye < HINGE - 1:                                     # its inside, squashed until it's fully up
-            m = (AX > LID_X[0]) & (AX < LID_X[1]) & (AY > ye) & (AY < HINGE)
+            m = (AX > lx0) & (AX < lx1) & (AY > ye) & (AY < HINGE)
             IY = HINGE - (HINGE - AY) * (HINGE - LID_TOP) / (HINGE - ye)
-            lid = sample(self.box_img, AX, IY)
+            IX = LID_X[0] + (AX - lx0) * (LID_X[1] - LID_X[0]) / (lx1 - lx0)
+            lid = sample(self.box_img, IX, IY) * (0.55 + 0.45 * o)
             rgb = np.where(m[..., None], lid, rgb)
         # light spills out of the opened box and pulses with the heart
-        o = math.sin(min(th, math.pi / 2))
         pulse = sum(math.exp(-(t - tb) / 0.22) for tb, _ in BEATS if t >= tb)
         d = np.hypot(AX - KEY_C[0], (AY - KEY_C[1]) * 1.3)
         glow = o * (0.5 + 0.5 * pulse) * np.exp(-d / 85) * (1 - press * 0.6)
