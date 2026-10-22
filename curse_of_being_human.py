@@ -3,7 +3,7 @@ The Curse of Being Human  |  9:16, red and black, every frame is text, cut to a 
 One continuous camera, no cuts: each scene turns into the next.
 
 the curse of being human: red code types across the screen and the code is ultron (from a reference),
-his eyes glowing, his head turning slowly -> yet manufacture chaos: his eyes flare, and from them pixel flames
+his eyes glowing; he leans in toward us, swaying, his head turning and nodding -> yet manufacture chaos: his eyes flare, and from them pixel flames
 (from a reference) spread out over him ->
 they fear death: he burns away in sparks to an x-ray skull with a cassette for a brain (from a reference) ->
 yet waste their lives: the tape unspools, the camera follows it down to money on a string (from a reference) ->
@@ -12,8 +12,8 @@ they demand freedom: the string snaps, the money falls and the camera falls afte
 own prisons: pull back, the prison is inside an eye -> perhaps the greatest flaw in your design: the eye is
 one of a wall of eyes darting about, blinking, then all turning to look at you -> is not your mortality: they look
 away again -> it is your extraordinary ability: they close, the camera comes back to the eye with the prison in it
-and it closes too; its lid line becomes the seam of a closed ring box (from a reference), and pulling back, two
-hands hold the box -> to remain alive: the fingers come down on the lid and on the hit lift it, the box opening
+and it closes too; its lid line becomes the seam of a closed ring box (from a reference, etched with the same
+skin texture so the cut is seamless), and pulling back, two hands hold the box -> to remain alive: the fingers come down on the lid and on the hit lift it, the box opening
 like the eye did, an Esc key inside, its light pulsing with the heart -> without ever truly living: it is never
 pressed; the hands and the box go dark, the key's light last.
 
@@ -175,6 +175,7 @@ def lids(xl, op):
 # the neck his head turns on, his eyes
 ULT_K, ULT_C = 3.5, (240.0, 285.0)
 ULT_NECK = (262.0, 245.0)
+ULT_LEAN, ULT_HIP = (235.0, 170.0), (300.0, 620.0)   # he leans in toward us about his face, sways about his hips
 ULT_EYES = [(243.0, 120.0), (191.0, 156.0)]
 ULT_HEAD = [(165, 100), (178, 80), (200, 66), (236, 60), (258, 68), (278, 86), (300, 88), (300, 130), (170, 130)]
 # "yet manufacture chaos": his eyes flare and the fire spreads out from them
@@ -185,6 +186,7 @@ SKULL_K = [(6.8, 1.2), (7.4, 1.25), (9.2, 1.5), (12.6, 1.5)]
 SKULL_HY = [(6.8, 520), (7.4, 545), (9.2, 860), (12.6, 880)]
 SKULL_E = (300.0, 240.0)
 REELS = [((243.0, 120.0), 40.0), ((368.0, 146.0), 62.0)]
+SKULL_DOME = (308.8, 179.5, 296.8, 203.0)        # the ellipse of the skull's outline, for the top the photo crops off
 TAPE0 = (250.0, 415.0)
 TAPE_L = [(9.2, 0), (9.45, 400), (9.7, 1200), (9.95, 2080), (10.15, 2260), (10.4, 2140), (10.7, 2190), (11.2, 2175), (12.6, 2175)]
 FIRE_K = 2.0                                     # fire pattern, screen px per image px
@@ -192,6 +194,16 @@ FIRE_K = 2.0                                     # fire pattern, screen px per i
 MONEY_KNOT, MONEY_C = (159.0, 0.0), (200.0, 350.0)   # money photo px: the string's top, the stack's middle
 K_M0 = 1.9                                       # screen px per photo px
 T_SNAP, MONEY_G = 11.83, 5200.0                  # "They demand freedom": the string snaps, the money drops
+
+def dome(img, pad=40):
+    """the x-ray's photo cuts the top of the skull off flat: carry its outline on up and give it back its dome"""
+    h, w = img.shape
+    cx, cy, rx, ry = SKULL_DOME
+    yy, xx = np.mgrid[-pad:0, 0:w]
+    inside = (1 - np.sqrt(((xx - cx) / rx) ** 2 + ((yy - cy) / ry) ** 2)) * ry     # px in from the outline
+    top = np.convolve(img[0:4].mean(0), np.ones(9) / 9, "same")[None, :]
+    cap = top * (1 + 0.2 * np.exp(-np.maximum(inside, 0) / 6)) * np.clip(inside / 8, 0, 1)
+    return np.concatenate([cap.astype(np.float32), img]), pad
 
 def sample(img, PX, PY):
     """bilinear sample of an (h, w) or (h, w, c) image at float px; zero outside"""
@@ -262,7 +274,7 @@ class Film:
         fig = Image.fromarray(255 - np.asarray(fld))
         self.ult_near = np.asarray(fig.filter(ImageFilter.GaussianBlur(7)), np.float32) / 255.0
         self.fire = np.asarray(Image.open(os.path.join(here, "assets", "fire.png")).convert("RGB"), np.float32) / 255.0
-        self.skull = np.asarray(Image.open(os.path.join(here, "assets", "skull_xray.png")).convert("L"), np.float32) / 255.0
+        self.skull, self.skull_pad = dome(np.asarray(Image.open(os.path.join(here, "assets", "skull_xray.png")).convert("L"), np.float32) / 255.0)
         self.money = np.asarray(Image.open(os.path.join(here, "assets", "money.png")).convert("RGBA"), np.float32) / 255.0
         self.prison = np.asarray(Image.open(os.path.join(here, "assets", "eye_bars.png")).convert("L"), np.float32) / 255.0
         self.build_code(rng)
@@ -471,15 +483,23 @@ class Film:
         if t < 8.9:
             PX = ULT_C[0] + (SX - 540) / ULT_K
             PY = ULT_C[1] + (SY - 960) / ULT_K
+            # he leans in toward us the whole time, and his body sways a little, like someone standing there
+            lean = 1 + 0.12 * float(smoother(0.0, 6.6, t))
+            PX = ULT_LEAN[0] + (PX - ULT_LEAN[0]) / lean
+            PY = ULT_LEAN[1] + (PY - ULT_LEAN[1]) / lean
+            sway = hm * 0.022 * math.sin(t * 0.6 + 0.3)
+            qx, qy = PX - ULT_HIP[0], PY - ULT_HIP[1]
+            PX = ULT_HIP[0] + qx * math.cos(sway) - qy * math.sin(sway)
+            PY = ULT_HIP[1] + qx * math.sin(sway) + qy * math.cos(sway)
             hw = np.clip((255 - PY) / 45, 0, 1) * np.clip((350 - PX) / 40, 0, 1)      # the head, not the body
-            tilt = hm * (0.05 * math.sin(t * 0.8 + 1.0) + 0.02 * math.sin(t * 1.7 + 0.4))
+            tilt = hm * (0.08 * math.sin(t * 0.8 + 1.0) + 0.03 * math.sin(t * 1.7 + 0.4))
             ang = -tilt * hw
             qx, qy = PX - ULT_NECK[0], PY - ULT_NECK[1]
             PX = ULT_NECK[0] + qx * np.cos(ang) - qy * np.sin(ang)
             PY = ULT_NECK[1] + qx * np.sin(ang) + qy * np.cos(ang)
-            PX = PX - hm * hw * 3.0 * math.sin(t * 0.45 + 2.0)                     # a slow turn and nod
-            PY = PY - hm * hw * 3.5 * math.sin(t * 0.8 + 0.5)
-            PY = PY - hm * 1.5 * math.sin(t * 1.2) * (1 - hw)                     # breathing
+            PX = PX - hm * hw * 6.0 * math.sin(t * 0.45 + 2.0)                     # a slow turn and nod
+            PY = PY - hm * hw * 6.0 * math.sin(t * 0.8 + 0.5)
+            PY = PY - hm * 2.5 * math.sin(t * 1.2) * (1 - hw)                     # breathing
             h, w = self.ultron.shape[:2]
             rgb = sample(self.ultron, np.clip(PX, 0, w - 1.01), np.clip(PY, 0, h - 1.01))
             fld = sample(self.ult_bg, np.clip(PX, 0, w - 1.01), np.clip(PY, 0, h - 1.01))
@@ -520,7 +540,7 @@ class Film:
             ex, ey = SX - hx, SY - hy
             PX = SKULL_E[0] + (ex * c2 + ey * s2) / k
             PY = SKULL_E[1] + (-ex * s2 + ey * c2) / k
-            ink = self.bust_sample(self.skull, PX, PY)
+            ink = self.bust_sample(self.skull, PX, PY + self.skull_pad)
             scan = ((t - 7.3) * 520) % 1500 - 150
             bb = ink * (1.05 + 0.1 * math.sin(t * 9)) + 0.35 * ink * np.exp(-((PY - scan) / 22) ** 2)
             spin = t * 2.5 + (0.004 * ckey(t, TAPE_L) if t > 9.2 else 0.0)
@@ -888,6 +908,10 @@ class Film:
         tx = xx % (2 * tw); tx = np.where(tx >= tw, 2 * tw - 1 - tx, tx)
         plate[hole] = tex[ty[hole], tx[hole]]
         self.box_plate = plate
+        # the box is etched like the skin it comes out of: the skin's texture, lined up with the wall's at the cut
+        tm = (MCUT[0] + MCUT[1]) / 2
+        ce, cb = self.cam_b(tm), self.box_cam(tm)
+        self.box_uv = (ce[0], ce[1], cb[0], cb[1], cb[2] / (EU * ce[2]))
 
     def box_cam(self, t):
         cx, cy = ckey(t, BOXCAM_X), ckey(t, BOXCAM_Y)
@@ -952,6 +976,14 @@ class Film:
         white = mn > 0.72
         col = np.where(red[..., None], rgb / (mx[..., None] + 0.02), redmap(b * 0.95))
         col = np.where(white[..., None], PALE, col)
+        # etched like the skin it came out of: the same mottling and ink lines, matching the wall's at the cut
+        ex0, ey0, bx0, by0, kk = self.box_uv
+        U = ex0 + (AX - bx0) * kk
+        V = ey0 - (cy + (-dx * s + (SY - 960) * c) / z - by0) * kk
+        fl, ink = self.flesh(U, V, t, z / (kk * EU))
+        e = 1 - 0.6 * float(smoother(MCUT[1], 26.4, t))                 # strong at the cut, lighter once it's a box
+        b = b * (1 - 0.28 * e + 0.4 * e * np.clip((fl - 0.44) / 0.56, 0, 1)) * np.where(red, 1 - 0.18 * e, 1.0)
+        b = np.where(ink & ~(white & (t > 25.6)), b * (1 - 0.88 * e), b)
         b = np.clip(b + 0.6 * glow * (on_key | (b < 0.2)), 0, 1)
         col = np.where(((glow > 0.12) & ~red & ~white)[..., None], HOT, col)
         # soften the edges of the picture into the dark

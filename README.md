@@ -40,7 +40,7 @@ python second_sun.py --music chihiro.mp3 --export second_sun.mp4
 
 ## 4. The Curse of Being Human (9:16, red and black, cut to a spoken-word track)
 One continuous camera, no cuts, every scene turns into the next: red code types across the screen
-and becomes Ultron, eyes glowing, his head turning slowly; his eyes flare and the fire spreads from them
+and becomes Ultron, eyes glowing, leaning in toward us, his head turning; his eyes flare and the fire spreads from them
 over him and burns him away in sparks to an x-ray skull with a cassette for a brain;
 the tape unspools down to money on a string; the string snaps, the money falls and the camera
 falls after it into a cell with hands gripping the bars; the prison is inside an eye, the eye is one of a wall of eyes that dart about and blink,
