@@ -3,8 +3,9 @@ The Curse of Being Human  |  9:16, red and black, every frame is text, cut to a 
 One continuous camera, no cuts: each scene turns into the next.
 
 the curse of being human: a red rim light traces a classical bust (from a reference photo) ->
-humans pursue peace: dots fill it in, the camera moves in on the head -> yet manufacture chaos: it catches fire ->
-they fear death: the fire burns the face off, an x-ray skull turns to profile, a cassette for a brain ->
+humans pursue peace: dots fill it in, the camera moves in on the head ->
+yet manufacture chaos: pixel flames (from a reference) climb over it ->
+they fear death: the fire burns away to an x-ray skull with a cassette for a brain (from a reference) ->
 yet waste their lives: the tape unspools, the camera follows it down to a stack of money on a string ->
 they demand freedom: the money drops, the string stays, more strings fall and harden into bars,
 hands grab them -> own prisons: pull back, the prison is inside an eye ->
@@ -95,9 +96,6 @@ def _ell(x, y, z, rx, ry, rz):
     k1 = np.sqrt((x / rx ** 2) ** 2 + (y / ry ** 2) ** 2 + (z / rz ** 2) ** 2)
     return k0 * (k0 - 1) / (k1 + 1e-9)
 
-def _sph(x, y, z, r):
-    return np.sqrt(x * x + y * y + z * z) - r
-
 def _cap(x, y, z, a, b, ra, rb=None):
     rb = ra if rb is None else rb
     bx, by, bz = b[0] - a[0], b[1] - a[1], b[2] - a[2]
@@ -105,44 +103,10 @@ def _cap(x, y, z, a, b, ra, rb=None):
     h = np.clip((px * bx + py * by + pz * bz) / (bx * bx + by * by + bz * bz), 0, 1)
     return np.sqrt((px - bx * h) ** 2 + (py - by * h) ** 2 + (pz - bz * h) ** 2) - (ra + (rb - ra) * h)
 
-def _smax(a, b, k):
-    return -smin(-a, -b, k)
-
 def rot(yaw, pitch):
     """head -> camera"""
     cy, sy, cp, sp = math.cos(yaw), math.sin(yaw), math.cos(pitch), math.sin(pitch)
     return np.array([[cy, 0, sy], [0, 1, 0], [-sy, 0, cy]]) @ np.array([[1, 0, 0], [0, cp, -sp], [0, sp, cp]])
-
-def flesh_mask(x, y, z):
-    """cheap head + neck volume for the x-ray"""
-    d = np.minimum(_ell(x, y - 0.25, z + 0.05, 0.80, 0.92, 0.90), _ell(x, y + 0.32, z - 0.15, 0.60, 0.70, 0.62))
-    d = np.minimum(d, _cap(x, y, z, (0, -0.65, -0.08), (0, -1.9, -0.12), 0.40))
-    return np.minimum(d, _ell(x, y + 2.25, z + 0.15, 1.55, 0.55, 0.62)) < 0
-
-def skull_sdf(x, y, z):
-    """skull in the head's frame: cranium, brow, deep orbits, nose cavity, cheekbones, teeth, jaw, spine"""
-    ax = np.abs(x)
-    d = _ell(x, y - 0.27, z + 0.06, 0.74, 0.86, 0.84)
-    d = smin(d, _ell(x, y + 0.20, z - 0.36, 0.46, 0.44, 0.40), 0.15)
-    d = smin(d, _cap(x, y, z, (-0.36, 0.13, 0.55), (0.36, 0.13, 0.55), 0.09), 0.08)
-    d = smin(d, _ell(ax - 0.40, y + 0.10, z - 0.28, 0.12, 0.10, 0.26), 0.08)
-    d = _smax(d, -_sph(ax - 0.38, y + 0.38, z - 0.16, 0.17), 0.05)              # under the cheekbone
-    d = _smax(d, -_sph(ax - 0.25, y - 0.01, z - 0.60, 0.17), 0.04)              # orbits
-    d = _smax(d, -_ell(x, y + 0.21, z - 0.66, 0.075, 0.13, 0.25), 0.03)         # nose cavity
-    d = smin(d, _ell(x, y + 0.50, z - 0.45, 0.30, 0.12, 0.26), 0.06)            # upper jaw
-    d = smin(d, _ell(x, y + 0.63, z - 0.46, 0.28, 0.08, 0.23), 0.02)            # teeth
-    d = smin(d, _ell(x, y + 0.72, z - 0.45, 0.26, 0.07, 0.21), 0.02)
-    d = _smax(d, -_ell(x, y + 0.675, z - 0.55, 0.3, 0.008, 0.2), 0.005)         # the bite
-    teeth_gaps = (np.abs(y + 0.675) < 0.11) & (z > 0.25) & (np.cos(np.arctan2(x, z - 0.1) * 26) > 0.82)
-    d = np.where(teeth_gaps, np.maximum(d, 0.006), d)
-    jaw = np.minimum(_cap(ax, y, z, (0.40, -0.10, -0.08), (0.37, -0.70, 0.08), 0.07),
-                     _cap(ax, y, z, (0.37, -0.70, 0.08), (0.0, -0.86, 0.42), 0.08))
-    d = smin(d, smin(jaw, _sph(x, y + 0.85, z - 0.44, 0.1), 0.05), 0.04)
-    for k in range(8):
-        yk = -1.0 - 0.17 * k
-        v = smin(_ell(x, y - yk, z + 0.22, 0.14, 0.055, 0.12), _cap(x, y, z, (0, yk, -0.3), (0, yk - 0.04, -0.47), 0.035), 0.03)
-        d = np.minimum(d, v)
-    return d
 
 def march(sdf, o, dvec, t0, t1, steps=46, eps=0.004):
     n = len(o)
@@ -166,7 +130,6 @@ def normals(sdf, p, e=0.004):
 def unit(*v):
     v = np.array(v, float); return v / np.linalg.norm(v)
 
-L_KEY = unit(-0.5, 0.45, 0.75)
 
 # ------------------------------------------------------------------ 2D helpers
 def _seg2(x, y, a, b, ra, rb=None):
@@ -221,15 +184,20 @@ def fist_sdf(x, y, z, clench):
               _cap(x, y, z, (-0.16, -0.12, rg + 0.05), (0.06, 0.05, rg + 0.07), 0.09, 0.075), 0.03)
     return smin(d, th, 0.04)
 
-# ------------------------------------------------------------------ scene A camera (head units)
-YAW = [(0, 0.0), (7.4, 0.02), (9.2, 1.55), (10.6, 1.57), (12.6, 1.6)]
-PITCH = [(0, 0.02), (5.0, 0.02), (9.2, -0.04), (12.6, -0.04)]
-SCALE = [(0, 405), (2.6, 470), (5.0, 590), (7.4, 640), (9.2, 335), (12.6, 340)]
+# ------------------------------------------------------------------ scene A camera (photo px)
+# the bust photo: screen px per photo px, where it sits, the point between the eyes
+BUST_K = [(0, 1.82), (2.6, 2.1), (5.0, 2.65), (7.4, 2.9), (9.0, 3.1)]
+HY = [(0, 670), (2.6, 720), (5.0, 860), (7.4, 900), (9.0, 920)]
 ROLL = [(0, -0.03), (2.6, 0.02), (5.0, -0.02), (7.4, 0.02), (9.2, 0.0), (12.6, 0.0)]
-HY = [(0, 670), (2.6, 720), (5.0, 860), (7.4, 900), (9.2, 880), (12.6, 880)]
-BUST_U, BUST_E = 223.0, (255.0, 290.0)          # bust photo: px per head unit, the point between the eyes
-TAPE_L = [(9.2, 0), (9.45, 1.2), (9.7, 3.6), (9.95, 6.2), (10.15, 6.75), (10.4, 6.4), (10.7, 6.55), (11.2, 6.5), (12.6, 6.5)]
-Z_START, Y_START, Z_LINE = -0.40, 0.37, -0.32   # tape leaves the left reel, then hangs at z = Z_LINE
+BUST_E = (255.0, 290.0)
+# the x-ray: screen px per image px, the head's center, the reels, where the drawn tape ends
+SKULL_K = [(6.8, 2.25), (7.4, 2.1), (9.2, 1.55), (12.6, 1.5)]
+SKULL_HY = [(6.8, 980), (9.2, 900), (12.6, 900)]
+SKULL_E = (300.0, 240.0)
+REELS = [((243.0, 120.0), 40.0), ((368.0, 146.0), 62.0)]
+TAPE0 = (250.0, 415.0)
+TAPE_L = [(9.2, 0), (9.45, 400), (9.7, 1200), (9.95, 2080), (10.15, 2260), (10.4, 2140), (10.7, 2190), (11.2, 2175), (12.6, 2175)]
+FIRE_K = 2.0                                     # fire pattern, screen px per image px
 T_CUT = 11.95                                    # the money drops
 MB = (112.0, 210.0, 34.0)                        # money stack half size, px
 
@@ -279,6 +247,9 @@ class Film:
         self.rand = rng.random((FROWS, FCOLS))
         self.bill = bill_texture()
         self.setup_bust()
+        here = os.path.dirname(os.path.abspath(__file__))
+        self.skull = np.asarray(Image.open(os.path.join(here, "assets", "skull_xray.png")).convert("L"), np.float32) / 255.0
+        self.fire = np.asarray(Image.open(os.path.join(here, "assets", "fire.png")).convert("RGB"), np.float32) / 255.0
         self.build_code(rng)
         # the fire eats the face from the bottom up
         self.T_burn = 7.25 + 1.2 * np.clip((1750 - FGY) / 1500, 0, 1) + 0.35 * (fbm(FGX / 150, FGY / 150, 3, 19) - 0.5)
@@ -348,15 +319,13 @@ class Film:
         return np.where(ok, v, 0.0)
 
     def setup_tape(self):
-        S, roll = ckey(11.5, SCALE), ckey(11.5, ROLL)
-        R = rot(ckey(11.5, YAW), ckey(11.5, PITCH))
-        c = np.array([[0.0, -3.0, Z_LINE]]) @ R.T
-        X, _ = self.to_screen(c, S, 0.0, 0.0, roll)
-        self.HX = [(0, 540), (8.0, 545), (10.6, 540 - X[0]), (12.6, 540 - X[0])]
+        # the tape hangs straight at screen x = 540 once the camera has panned; the money ends up centred
+        k = ckey(11.5, SKULL_K)
+        hxf = 540 - (TAPE0[0] - SKULL_E[0]) * k
+        self.HXS = [(6.8, 540), (8.6, 545), (10.6, hxf), (12.6, hxf)]
         self.PAN = [(0, 0)]
-        c = np.array([[0.0, Y_START - 6.5, Z_LINE]]) @ R.T
-        _, Y = self.to_screen(c, S, 0.0, ckey(11.5, HY), roll)
-        P = 960 - (Y[0] + 20 + MB[1])
+        y0 = ckey(11.5, SKULL_HY) + (TAPE0[1] - SKULL_E[1]) * k
+        P = 960 - (y0 + TAPE_L[-1][1] + 20 + MB[1])
         self.PAN = [(0, 0), (9.35, 0), (9.9, 0.12 * P), (10.6, 0.58 * P), (11.3, 0.93 * P), (12.6, P)]
         # the money only exists on the tape once its end is out of frame
         self.t_att = 12.0
@@ -365,29 +334,28 @@ class Film:
             if hang is not None and hang[1] > 2010:
                 self.t_att = tt; break
 
-    @staticmethod
-    def to_screen(c, S, hx, hy, roll):
-        dx, dy = c[:, 0] * S, -c[:, 1] * S
+    def skull_cam(self, t):
+        return ckey(t, SKULL_K), ckey(t, self.HXS), ckey(t, SKULL_HY) + ckey(t, self.PAN), ckey(t, ROLL)
+
+    def skull_to_screen(self, PX, PY, t):
+        k, hx, hy, roll = self.skull_cam(t)
+        dx, dy = (PX - SKULL_E[0]) * k, (PY - SKULL_E[1]) * k
         cr, sr = math.cos(roll), math.sin(roll)
         return hx + dx * cr - dy * sr, hy + dx * sr + dy * cr
 
-    def pose(self, t):
-        return (ckey(t, YAW), ckey(t, PITCH), ckey(t, SCALE), ckey(t, self.HX),
-                ckey(t, HY) + ckey(t, self.PAN), ckey(t, ROLL))
-
     def tape(self, t):
-        """tape path in the head's mid plane, projected: screen points and the hanging end"""
+        """the tape running on from the curls in the x-ray, down out of frame: screen points, hanging end"""
         L = ckey(t, TAPE_L) if t > 9.2 else 0.0
-        if L <= 0.02:
+        if L <= 5:
             return None, None
-        s = np.concatenate([np.arange(0, min(L, 2.0), 0.002), np.arange(2.0, L, 0.006)])
-        A = 0.16 * np.exp(-s / 1.8)
-        ph = 10 * s + 1.2 + 0.6 * math.sin(t * 1.3)
-        z = Z_LINE + (Z_START - Z_LINE) * np.exp(-s / 0.3) + A * np.sin(ph) * (1 - np.exp(-s / 0.05))
-        y = Y_START - s + A * (np.cos(ph) - math.cos(1.2)) * (1 - np.exp(-s / 0.05))
-        yaw, pitch, S, hx, hy, roll = self.pose(t)
-        c = np.stack([np.zeros_like(s), y, z], 1) @ rot(yaw, pitch).T
-        X, Y = self.to_screen(c, S, hx, hy, roll)
+        s = np.concatenate([np.arange(0, min(L, 700), 0.6), np.arange(700, L, 2.5)])
+        k = ckey(t, SKULL_K)
+        A = 34 * k * np.exp(-s / 260)
+        ph = s / (17 * k) + 1.2 + 0.6 * math.sin(t * 1.3)
+        grow = 1 - np.exp(-s / 12)
+        X0, Y0 = self.skull_to_screen(np.array([TAPE0[0]]), np.array([TAPE0[1]]), t)
+        X = X0[0] + A * np.sin(ph) * grow
+        Y = Y0[0] + s + A * (np.cos(ph) - math.cos(1.2)) * grow
         return (X, Y), (X[-1], Y[-1])
 
     def money_layer(self, b, col, gl, solid, t, SX, SY, hang):
@@ -444,19 +412,14 @@ class Film:
         shape = (FROWS, FCOLS)
         b = np.zeros(shape); col = np.zeros(shape + (3,), np.float32)
         gl = np.zeros(shape, np.int64); solid = np.zeros(shape, bool)
-        yaw, pitch, S, hx, hy, roll = self.pose(t)
-        R = rot(yaw, pitch)
+        roll = ckey(t, ROLL)
         cr, sr = math.cos(roll), math.sin(roll)
-        dx, dy = SX - hx, SY - hy
-        u = (dx * cr + dy * sr) / S
-        v = -(-dx * sr + dy * cr) / S
-        box = (np.abs(u) < 1.95) & (v > -2.8) & (v < 1.6)
-        dv = np.array([0.0, 0.0, -1.0]) @ R
+        dx, dy = SX - 540, SY - ckey(t, HY)
         burnt = t >= self.T_burn
 
         # the bust: a red rim light traces it, dots fill it in, then firelight
         if t < 8.9:
-            k = S / BUST_U
+            k = ckey(t, BUST_K)
             PX = BUST_E[0] + (dx * cr + dy * sr) / k
             PY = BUST_E[1] + (-dx * sr + dy * cr) / k
             rim = self.bust_sample(self.bust_rim, PX, PY)
@@ -480,64 +443,54 @@ class Film:
             gl = np.where(on & (rb <= fill), dots, gl)
             solid |= ~burnt & (on | (inner > 0.05))
 
-        # x-ray: the skull glowing at its edges inside a faint head, a cassette for a brain
-        m = box & (t >= self.T_burn - 0.08)
-        if m.any() and t > 7.0:
-            o = np.stack([u[m], v[m], np.full(m.sum(), 3.0)], 1) @ R
-            fl = np.zeros(len(o))
-            for s_ in np.linspace(1.8, 4.2, 9):
-                p = o + s_ * dv
-                fl += flesh_mask(p[:, 0], p[:, 1], p[:, 2])
-            bb = 0.05 * (fl > 0) + 0.06 * fl / 9
-            ccol = np.repeat(RED[None, :] * 0.8, len(o), 0)
-            tt, hit = march(skull_sdf, o, dv, 1.0, 5.2, steps=48)
-            if hit.any():
-                p = o[hit] + tt[hit, None] * dv
-                n = normals(skull_sdf, p) @ R.T
-                fres = (1 - np.abs(n[:, 2])) ** 1.6
-                lam = np.clip(n @ L_KEY, 0, 1)
-                sb = np.clip(0.12 + 0.95 * fres + 0.18 * lam, 0, 1)
-                bb[hit] = np.maximum(bb[hit], sb)
-                ccol[hit] = PALE * sb[:, None] + RED * (1 - sb[:, None])
-            # cassette in the mid plane, seen face on in profile
-            wc = float(np.clip((abs(dv[0]) - 0.55) / 0.3, 0, 1))
-            if wc > 0:
-                sx_ = -o[:, 0] / dv[0]
-                zc, yc = o[:, 2] + sx_ * dv[2], o[:, 1] + sx_ * dv[1]
-                cb = self.cassette(zc, yc, t) * wc
-                inside = cb > 0.05
-                bb = np.where(inside, np.maximum(bb * 0.35, cb), bb)
-                ccol = np.where((cb > 0.3)[:, None], PALE * 0.5 + HOT * 0.5, ccol)
-            idxs = np.nonzero(m)
-            b[idxs] = np.maximum(b[idxs], bb)
-            col[idxs] = np.where((bb > 0.03)[:, None], ccol, col[idxs])
-            gl[idxs] = 0
+        # the x-ray, revealed where the fire has burnt through; the reels spin, a scan line runs down it
+        if t > 7.0:
+            k, hx, hy, rl = self.skull_cam(t)
+            c2, s2 = math.cos(rl), math.sin(rl)
+            ex, ey = SX - hx, SY - hy
+            PX = SKULL_E[0] + (ex * c2 + ey * s2) / k
+            PY = SKULL_E[1] + (-ex * s2 + ey * c2) / k
+            ink = self.bust_sample(self.skull, PX, PY)
+            scan = ((t - 7.3) * 520) % 1500 - 150
+            bb = ink * (1.05 + 0.1 * math.sin(t * 9)) + 0.35 * ink * np.exp(-((PY - scan) / 22) ** 2)
+            spin = t * 2.5 + (0.004 * ckey(t, TAPE_L) if t > 9.2 else 0.0)
+            for (rx, ry), rr in REELS:
+                d = np.hypot(PX - rx, PY - ry)
+                a_ = np.arctan2(PY - ry, PX - rx) - spin
+                spoke = (d < rr * 0.9) & (d > 11) & (np.cos(3 * a_) > 0.93)
+                bb = np.where(spoke, 0.85, bb)
+            on = burnt & (bb > 0.035)
+            bb = np.clip(bb, 0, 1)
+            b = np.where(on, bb, b)
+            col = np.where(on[..., None], redmap(bb), col)
+            solid |= burnt & (ink > 0.03)
 
-        # fire: flames climb from the bottom, burn the face off, then die
+        # fire: the pixel flames climb from the bottom, scrolling up, burn the face off, then die
         if 4.95 < t < 9.0:
             front = 1980 - 2200 * float(smoother(5.0, 6.6, t)) + 160 * (fbm(SX / 260, np.full(SX.shape, t * 0.6), 2, 3) - 0.5)
             live = (SY > front) & (t < self.T_burn + 0.4)
             if live.any():
-                warp = 2.2 * fbm(SX / 230, SY / 260 + t * 0.9, 2, 5)
-                n = fbm(SX / 46 + warp, SY / 140 + t * 2.3, 3, 7)
+                fh, fw, _ = self.fire.shape
+                FY = SY / FIRE_K + 250 * float((t - 5.0) / 3.6)
+                FX = (SX - 540) / FIRE_K + fw / 2 + 5 * np.sin(FY / 14 + t * 7)
+                i = np.clip(FX.astype(int), 0, fw - 1); j = np.clip(FY.astype(int), 0, fh - 1)
+                rgb = self.fire[j, i]
+                hot = np.clip((rgb[..., 1] - 0.22) / 0.35, 0, 1) ** 0.8
+                fb = np.clip((0.8 * rgb[..., 0] + 0.65 * hot) * (0.9 + 0.15 * np.sin(t * 12 + FY / 30)), 0, 1)
                 fade = 1 - sstep(self.T_burn - 0.05, self.T_burn + 0.4, t)
-                tongue = live & (n > 0.52); hotc = live & (n > 0.63); edge = live & (np.abs(n - 0.52) < 0.022)
-                base = live & ~tongue & ~edge
-                b = np.where(base, np.maximum(b * (1 - fade), 0.26 * fade), b)
-                col = np.where(base[..., None], RED * 0.8, col)
-                gl = np.where(base, np.where(fade > 0.3, CI[":"], gl), gl)
-                fb = np.where(hotc, 1.0, 0.72) * fade
-                b = np.where(tongue, np.maximum(fb, b * (1 - fade)), b)
-                col = np.where(tongue[..., None], np.where(hotc[..., None], HOT, RED), col)
-                gl = np.where(tongue & (fade > 0.3), np.where(hotc, CI["@"], CI["#"]), gl)
-                b = np.where(edge, b * (1 - fade), b)
-                gl = np.where(edge & (fade > 0.3), 0, gl)
-                solid |= edge & (fade > 0.3)
+                dark = live & (rgb[..., 0] < 0.28)
+                fl = live & ~dark
+                b = np.where(fl, np.maximum(fb * fade, b * (1 - fade)), b)
+                col = np.where(fl[..., None], RED * (1 - hot[..., None]) + HOT * hot[..., None], col)
+                b = np.where(dark, b * (1 - fade), b)
+                gl = np.where(live & (fade > 0.3), 0, gl)
+                solid |= live & (fade > 0.3)
             ember = (t > self.T_burn - 0.12) & (t < self.T_burn + 0.06)
             if ember.any():
                 rng = np.random.default_rng(fi + 3)
                 gl = np.where(ember, rng.choice(PRINTABLE, (FROWS, FCOLS)), gl)
-                b = np.where(ember, 0.95, b); col = np.where(ember[..., None], HOT, col)
+                b = np.where(ember, 0.95, b)
+                col = np.where(ember[..., None], np.where((self.rand > 0.5)[..., None], HOT, RED), col)
 
         # money glow: a red spotlight from the lower left while it hangs
         gm = float(sstep(10.2, 10.9, t)) * (1 - float(sstep(12.1, 12.5, t)))
@@ -562,29 +515,6 @@ class Film:
             if t >= self.t_att:
                 self.money_layer(b, col, gl, solid, t, SX, SY, (pts[0][-1], pts[1][-1]))
         return b, col, gl, solid
-
-    def cassette(self, z, y, t):
-        """x-ray of a cassette in the head's mid plane: shell, window, two reels, tape packs"""
-        cb = np.zeros_like(z)
-        inside = (z > -0.62) & (z < 0.20) & (y > 0.27) & (y < 0.72)
-        edge = inside & ((z < -0.595) | (z > 0.175) | (y < 0.295) | (y > 0.695))
-        cb = np.where(inside, 0.16, cb)
-        win = (z > -0.47) & (z < -0.0) & (y > 0.42) & (y < 0.60)
-        cb = np.where(win & ~((z > -0.458) & (z < -0.012) & (y > 0.432) & (y < 0.588)), 0.6, cb)
-        cb = np.where(inside & (np.abs(y - 0.665) < 0.006) & (z > -0.55) & (z < 0.13), 0.55, cb)
-        trap = inside & (y < 0.36) & (np.abs(z + 0.21) < 0.28 - (0.36 - y) * 0.9)
-        cb = np.where(trap & ((np.abs(y - 0.36) < 0.008) | (np.abs(np.abs(z + 0.21) - (0.28 - (0.36 - y) * 0.9)) < 0.01)), 0.6, cb)
-        L = ckey(t, TAPE_L) if t > 9.2 else 0.0
-        spin = t * 1.6 + 2.2 * L
-        for zc, R in ((-0.40, 0.14 - 0.012 * L), (-0.06, 0.08 + 0.006 * L)):
-            d = np.hypot(z - zc, y - 0.51)
-            a = np.arctan2(y - 0.51, z - zc) - spin
-            pack = (d < R) & (d > 0.05)
-            cb = np.where(pack, 0.42 + 0.25 * (np.sin(d * 260) > 0), cb)
-            cb = np.where(np.abs(d - R) < 0.006, 0.75, cb)
-            cb = np.where((d < 0.05) & (d > 0.03) & (np.cos(6 * a) > 0.2), 0.95, cb)
-            cb = np.where(np.abs(d - 0.05) < 0.006, 0.9, cb)
-        return np.where(edge, 0.95, cb)
 
     # ---------- scene B: bars, the eye, the wall of eyes, the red square, the line
     def setup_wall(self, rng):
