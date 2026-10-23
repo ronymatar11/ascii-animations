@@ -20,7 +20,8 @@ it lands on the bars on the hit, the hands rattle them ->
 own prisons: pull back, the prison is inside an eye -> perhaps the greatest flaw in your design: the eye is
 one of a wall of eyes darting about, blinking, then all turning to look at you -> is not your mortality: they look
 away again -> it is your extraordinary ability: they close, the eye with the prison last; the camera keeps
-pulling back without a cut and the wall of eyes turns out to be the face of a stone (from a reference drawing): its
+pulling back without a cut, the skin darkening to stone in spreading patches, and the wall of eyes turns out to be
+the face of a stone (from a reference drawing): its
 outline closes in from the edges, the skin and the closed eyes shrink into its pencil texture; a butterfly rests on
 it, opening and closing its wings -> to remain alive: it takes off and flies up, and on the hit the string
 tying it to the stone snaps tight -> without ever truly living: it beats its wings and pulls with everything, the
@@ -301,7 +302,8 @@ T_FLY = (25.5, 26.5)                             # it takes off, and on the hit 
 # no cut: the wall of eyes is the face of the stone. one camera keeps pulling back, the stone's outline closes in,
 # the skin and closed eyes shrink into its pencil texture: stone px per eye unit, and when the wall gives way
 KS = 25.0
-T_STONE = (23.6, 24.3, 25.0)                     # the stone starts to show, the skin starts to turn to pencil, gone
+T_STONE = (23.6, 24.2, 25.1)                     # the stone starts to show, the skin starts to turn to pencil, gone
+T_PETRIFY = (22.9, 24.9)                         # meanwhile the skin darkens to stone, in patches spreading over it
 
 
 class Film:
@@ -1053,6 +1055,14 @@ class Film:
 
         if t < T_B + 0.4:                                         # the money falls on out of frame
             self.money_layer(b, col, gl, solid, t, SX, SY, self.snap_hang)
+
+        # as the eyes close the skin turns to stone: dark patches spread over it (fixed on the surface) until it's as
+        # dark as the rock, so there is no jump from red to black
+        if T_PETRIFY[0] < t < T_STONE[2]:
+            nz = fbm(X * 0.22 + 3.0, Y * 0.22, 3, 41)
+            pet = np.clip((t - T_PETRIFY[0]) / (T_PETRIFY[1] - T_PETRIFY[0]) * 1.3 + 1.1 * (nz - 0.5) - 0.15, 0, 1)
+            pet = pet * pet * (3 - 2 * pet)
+            b = b * (1 - 0.72 * pet); col = col * (1 - 0.3 * pet[..., None])
 
         # the wall of eyes was the face of the stone all along: as the camera pulls back its outline closes in from
         # the edges of the frame, and the skin and the closed eyes on it turn into its pencil texture
