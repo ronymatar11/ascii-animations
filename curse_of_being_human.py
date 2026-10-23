@@ -8,8 +8,9 @@ glowing (he blinks once); he speaks the words: his jaw swings down on its hinge 
 opens along his own curved lip line, black inside; he leans in toward us, swaying, his head turning and
 nodding -> yet manufacture chaos: his eyes flare and catch, and a burning edge spreads out over him from
 them; behind it is a painting (from a reference) of a dark figure in a field, its two white eyes exactly where
-his were; the camera turns level and pulls back: the figure stands in the wheat, which burns like flames and sways,
-the clouds drift, the smear round its head flutters ->
+his were; the camera turns level and pulls back: the figure stands in the wheat, which burns like flames and sways
+in gusts of wind, the clouds drift; the figure sways from its feet and breathes, its head tilts, the smear round it
+flutters, it closes its eyes and opens them, twice ->
 they fear death: the figure burns through, from its eyes, to the x-ray skull underneath (from a reference), its
 eye socket where the figure's eyes were, a cassette for a brain; the camera pushes in on it ->
 yet waste their lives: the tape unspools, the camera follows it down to money on a string (from a reference) ->
@@ -208,6 +209,8 @@ T_SPREAD = 5.05
 FIRE_O = [(546.0, 359.0), (401.0, 447.0)]        # his eyes, on screen, when they catch
 FIELD_EYES = [(646.6, 564.1), (729.0, 553.7)]    # the figure's eyes in the painting
 FIELD_EM = (687.8, 558.9)                        # between them
+FIELD_FEET, FIELD_NECK = (700.0, 1600.0), (690.0, 760.0)   # the figure sways from its feet, its head tilts on its neck
+FIELD_BLINKS = [6.15, 7.0]                       # it closes its eyes and opens them
 # the painting's camera: where its eyes are on screen, screen px per painting px, its tilt. it starts lined up with
 # ultron's eyes (his face is tilted), turns level and pulls back to the whole figure in the field
 FIELD_EX = [(5.0, 473.5), (5.7, 485.0), (6.5, 505.0), (7.4, 509.0), (8.5, 511.0)]
@@ -309,6 +312,7 @@ class Film:
         fig = Image.fromarray(255 - np.asarray(fld))
         self.ult_near = np.asarray(fig.filter(ImageFilter.GaussianBlur(7)), np.float32) / 255.0
         self.field = np.asarray(Image.open(os.path.join(here, "assets", "shadow_field.png")).convert("RGB"), np.float32) / 255.0
+        self.setup_field()
         self.skull, self.skull_pad = dome(np.asarray(Image.open(os.path.join(here, "assets", "skull_xray.png")).convert("L"), np.float32) / 255.0)
         self.money = np.asarray(Image.open(os.path.join(here, "assets", "money.png")).convert("RGBA"), np.float32) / 255.0
         self.prison = np.asarray(Image.open(os.path.join(here, "assets", "eye_bars.png")).convert("L"), np.float32) / 255.0
@@ -416,25 +420,73 @@ class Film:
         qx, qy = (PX - FIELD_EM[0]) * k, (PY - FIELD_EM[1]) * k
         return ex + qx * math.cos(r) - qy * math.sin(r), ey + qx * math.sin(r) + qy * math.cos(r)
 
+    def setup_field(self):
+        """the painting without the figure (sky and wheat filled in behind it), so the figure can move over it"""
+        img = self.field
+        h, w = img.shape[:2]
+        yy, xx = np.mgrid[0:h, 0:w]
+        dark = (img @ np.array([0.3, 0.59, 0.11], np.float32)) < 0.27
+        where = ((yy > 330) & (yy < 840) & (xx > 60) & (xx < 1380)) | (np.hypot((xx - 700) / 330, (yy - 1150) / 560) < 1)
+        m = Image.fromarray(((dark & where) * 255).astype(np.uint8)).filter(ImageFilter.MaxFilter(9))
+        hole = np.asarray(m) > 127
+        for fx, fy in FIELD_EYES:
+            hole |= np.hypot(xx - fx, yy - fy) < 16
+        # each row is filled across from the sky or the wheat on either side of it, smoothed, with the grain put back
+        plate = img.copy()
+        cols = np.arange(w)
+        for y in np.nonzero(hole.any(1))[0]:
+            k = ~hole[y]
+            if k.sum() < 2: continue
+            for c in range(3):
+                plate[y, hole[y], c] = np.interp(cols[hole[y]], cols[k], img[y, k, c])
+        soft = np.asarray(Image.fromarray((np.clip(plate, 0, 1) * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(6)),
+                          np.float32) / 255.0
+        grain = np.random.default_rng(7).normal(0, 0.045, plate.shape[:2]).astype(np.float32)[..., None]
+        plate = np.where(hole[..., None], np.clip(soft + grain, 0, 1), img)
+        self.field_plate = plate
+
     def field_scene(self, SX, SY, t):
-        """the painting of the dark figure in the field: the wheat sways like flames, the clouds drift, the smear
-        around its head flutters, its eyes glow"""
+        """the painting of the dark figure in the field: the wheat sways in gusts of wind like flames, the clouds
+        drift, the figure sways from its feet and breathes, its head tilts, the smear round it flutters, it blinks"""
         ex, ey, k, r = self.field_cam(t)
         dx, dy = (SX - ex) / k, (SY - ey) / k
         c, s_ = math.cos(r), math.sin(r)
         PX = FIELD_EM[0] + dx * c + dy * s_
         PY = FIELD_EM[1] - dx * s_ + dy * c
         img = self.field
-        rgb0 = sample(img, PX, PY)
-        lum0 = rgb0 @ np.array([0.3, 0.59, 0.11], np.float32)
-        fig = np.clip((0.3 - lum0) / 0.2, 0, 1)                         # the figure and its smear
         tt = t - 5.0
-        wind = (6 + 5 * np.sin(PX / 160 + tt * 0.8)) * np.sin(tt * 2.6 - PX / 90 + PY / 260) * np.clip((PY - 850) / 250, 0, 1)
-        drift = 14 * tt * np.clip((800 - PY) / 200, 0, 1)
-        flutter = 5 * np.sin(tt * 5 + PY / 22 + PX / 90) * np.clip((760 - PY) / 200, 0, 1)
-        bg = sample(img, PX - wind - drift, PY)
-        fg = sample(img, PX - flutter, PY + 2 * np.sin(tt * 3 + PX / 50) * np.clip((760 - PY) / 200, 0, 1))
+        # the figure: sways from its feet, breathes, its head tilts on its neck (all of it smoothly, around it)
+        wfig = 1 - sstep(0.85, 1.3, np.hypot((PX - 700) / 560, (PY - 1050) / 700))
+        ang = 0.035 * math.sin(tt * 1.3 + 0.5) + 0.018 * math.sin(tt * 0.55 + 2.0)
+        qx, qy = PX - FIELD_FEET[0], PY - FIELD_FEET[1]
+        bx = FIELD_FEET[0] + qx * math.cos(ang) + qy * math.sin(ang)
+        by = FIELD_FEET[1] - qx * math.sin(ang) + qy * math.cos(ang)
+        by = FIELD_FEET[1] + (by - FIELD_FEET[1]) * (1 - 0.018 * math.sin(tt * 2.1))          # breathing
+        wh = np.clip((860 - by) / 160, 0, 1)
+        hang = (0.08 * math.sin(tt * 0.9 + 1.2) + 0.03 * math.sin(tt * 2.3)) * wh
+        hx, hy = bx - FIELD_NECK[0], by - FIELD_NECK[1]
+        hx2 = FIELD_NECK[0] + hx * np.cos(hang) + hy * np.sin(hang)
+        hy2 = FIELD_NECK[1] - hx * np.sin(hang) + hy * np.cos(hang)
+        FXp = PX + (hx2 - PX) * wfig; FYp = PY + (hy2 - PY) * wfig
+        # the smear round its head flutters in the wind
+        flutter = 7 * np.sin(tt * 5 + FYp / 22 + FXp / 90) * np.clip((800 - FYp) / 200, 0, 1)
+        fg = sample(img, FXp - flutter, FYp + 2.5 * np.sin(tt * 3 + FXp / 50) * np.clip((800 - FYp) / 200, 0, 1))
+        hole0 = (fg @ np.array([0.3, 0.59, 0.11], np.float32))
+        fig = np.clip((0.3 - hole0) / 0.2, 0, 1) * (wfig > 0.05)
+        # the field: gusts roll across it, the near wheat bends the most; the clouds drift
+        gust = 0.6 + 0.4 * math.sin(tt * 0.9)
+        wind = gust * (20 * np.sin(tt * 2.2 - PX / 170 + PY / 240) + 9 * np.sin(tt * 3.7 - PX / 60 + PY / 90))
+        wind = wind * np.clip((PY - 820) / 220, 0, 1) * (0.6 + 0.4 * np.clip((PY - 1000) / 900, 0, 1))
+        drift = 16 * tt * np.clip((800 - PY) / 200, 0, 1)
+        bg = sample(self.field_plate, PX - wind - drift, PY)
         rgb = bg * (1 - fig[..., None]) + fg * fig[..., None]
+        # it blinks: its eyes go dark and light again
+        bl = max(math.exp(-((t - tb) / 0.1) ** 4) for tb in FIELD_BLINKS)          # shut a moment, then open
+        de = np.minimum.reduce([np.hypot(FXp - fx, FYp - fy) for fx, fy in FIELD_EYES])
+        if bl > 0.01:
+            shut = np.clip((14 - de) / 6, 0, 1)[..., None] * bl
+            rgb = rgb * (1 - shut) + 0.04 * shut
+        PX, PY = FXp, FYp                                               # the eyes move with its head
         R, G, B = rgb[..., 0], rgb[..., 1], rgb[..., 2]
         lum = 0.3 * R + 0.59 * G + 0.11 * B
         warm = np.clip((R - B) / 0.4, 0, 1)                            # the wheat: it burns
@@ -447,7 +499,7 @@ class Film:
         col = warm[..., None] * (RED * (1 - wheat[..., None]) + HOT * wheat[..., None]) + \
               (1 - warm[..., None]) * (RED * 0.6 * (1 - white[..., None]) + PALE * 0.8 * white[..., None])
         gl = np.where((warm > 0.5) & (b > 0.06), STALK[np.clip((b * len(STALK)).astype(int), 0, len(STALK) - 1)], 0)
-        eyes = sum(np.exp(-np.hypot(PX - fx, PY - fy) / 9.0) for fx, fy in FIELD_EYES) * (1.3 + 0.2 * math.sin(t * 2.2))
+        eyes = np.exp(-de / 9.0) * (1.3 + 0.2 * math.sin(t * 2.2)) * (1 - bl)
         hot = eyes > 0.3
         b = np.maximum(b, np.clip(eyes, 0, 1)); col = np.where(hot[..., None], PALE, col); gl = np.where(hot, 0, gl)
         inside = (PX >= 0) & (PX < img.shape[1] - 1) & (PY >= 0) & (PY < img.shape[0] - 1)
