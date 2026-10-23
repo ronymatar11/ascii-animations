@@ -4,7 +4,8 @@ One continuous camera, no cuts: each scene turns into the next.
 
 the curse of being human: red code types across the screen and the code is ultron (from a reference),
 written in the code itself, which streams across him with pulses of light running along it, his eyes
-glowing (he blinks once); he leans in toward us, swaying, his head turning and
+glowing (he blinks once); he speaks the words: his jaw swings down on its hinge with the voice and his mouth
+opens along his own curved lip line, glowing inside; he leans in toward us, swaying, his head turning and
 nodding -> yet manufacture chaos: his eyes flare and catch fire, and the pixel flames (from a reference) spread
 out over him from there, the heat running ahead of a ragged burning edge ->
 they fear death: it burns through his face to the x-ray skull underneath (from a reference), where his head was,
@@ -185,6 +186,9 @@ def lids(xl, op):
 # the neck his head turns on, his eyes
 ULT_K, ULT_C = 3.5, (240.0, 285.0)
 ULT_NECK = (262.0, 245.0)
+# his mouth: the line of his lips (it curves and slants with his face), the jaw below it, the jaw's hinge by his ear
+ULT_LIP = np.array([(163, 199), (168, 199), (185, 202), (205, 205), (225, 203), (242, 197), (258, 190)], float)
+ULT_JAW, ULT_JAW_R, ULT_HINGE = (205.0, 222.0), (62.0, 42.0), (280.0, 190.0)
 ULT_LEAN, ULT_HIP = (235.0, 170.0), (300.0, 620.0)   # he leans in toward us about his face, sways about his hips
 ULT_EYES = [(243.0, 120.0), (191.0, 156.0)]
 ULT_HEAD = [(165, 100), (178, 80), (200, 66), (236, 60), (258, 68), (278, 86), (300, 88), (300, 130), (170, 130)]
@@ -265,9 +269,10 @@ BOXCAM_Z = [(24.45, math.log(6.9)), (24.85, math.log(6.95)), (25.6, math.log(4.9
 
 
 class Film:
-    def __init__(self, handle="", lyrics=False, seed=5):
+    def __init__(self, handle="", lyrics=False, seed=5, voice=None):
         rng = np.random.default_rng(seed)
         self.handle, self.lyrics = handle, lyrics
+        self.voice = voice
         self.rand = rng.random((FROWS, FCOLS))
         here = os.path.dirname(os.path.abspath(__file__))
         self.ultron = np.asarray(Image.open(os.path.join(here, "assets", "ultron.png")).convert("RGB"), np.float32) / 255.0
@@ -380,6 +385,11 @@ class Film:
             _, hang = self.tape(tt)
             if hang is not None and hang[1] > 2010:
                 self.t_att = tt; break
+
+    def voice_at(self, t):
+        """how loud the voice is at t, 0..1 (from the track; silent without one)"""
+        if self.voice is None: return 0.0
+        return float(np.interp(t * FPS, np.arange(len(self.voice)), self.voice))
 
     def fire_dist(self, SX, SY):
         """how far the fire has to go from his eyes to get here: it climbs faster than it falls"""
@@ -516,6 +526,21 @@ class Film:
             PX = PX - hm * hw * 6.0 * math.sin(t * 0.45 + 2.0)                     # a slow turn and nod
             PY = PY - hm * hw * 6.0 * math.sin(t * 0.8 + 0.5)
             PY = PY - hm * 2.5 * math.sin(t * 1.2) * (1 - hw)                     # breathing
+            # he speaks: his jaw swings down on its hinge with the voice, and his mouth opens along his own lip
+            # line; it glows inside, like his eyes
+            v = self.voice_at(t) * hm
+            gap = np.zeros(PX.shape, bool); depth = np.zeros(PX.shape)
+            if v > 0.02:
+                lip = np.interp(PX, ULT_LIP[:, 0], ULT_LIP[:, 1])
+                e = np.hypot((PX - ULT_JAW[0]) / ULT_JAW_R[0], (PY - ULT_JAW[1]) / ULT_JAW_R[1])
+                th = 0.085 * v * (1 - sstep(0.45, 1.0, e)) * (PY > lip) * (PX > ULT_LIP[0, 0])   # fades into cheek and neck
+                qx, qy = PX - ULT_HINGE[0], PY - ULT_HINGE[1]
+                jx = ULT_HINGE[0] + qx * np.cos(th) - qy * np.sin(th)
+                jy = ULT_HINGE[1] + qx * np.sin(th) + qy * np.cos(th)
+                ljaw = np.interp(jx, ULT_LIP[:, 0], ULT_LIP[:, 1])
+                gap = (th > 0) & (jy < ljaw)                                     # between the upper lip and the jaw
+                depth = np.clip(np.minimum(PY - lip, ljaw - jy) / 2.5, 0, 1)
+                PX = np.where(gap, PX, jx); PY = np.where(gap, PY, jy)
             h, w = self.ultron.shape[:2]
             rgb = sample(self.ultron, np.clip(PX, 0, w - 1.01), np.clip(PY, 0, h - 1.01))
             fld = sample(self.ult_bg, np.clip(PX, 0, w - 1.01), np.clip(PY, 0, h - 1.01))
@@ -549,6 +574,11 @@ class Film:
             ucol = np.where((np.maximum(core, streak) > 0.25)[..., None], PALE,
                             np.where((halo > 0.12)[..., None], RED * 0.5 + HOT * 0.5, ucol))
             hot = np.maximum.reduce([core, halo, streak])
+            if gap.any():
+                mb = np.clip(0.3 + (0.35 + 0.4 * v) * depth, 0, 1)
+                ub = np.where(gap, mb, ub)
+                ucol = np.where(gap[..., None], np.where((depth > 0.55)[..., None], PALE * 0.4 + HOT * 0.6, HOT), ucol)
+                fld = np.where(gap, 0.0, fld); hot = np.where(gap, 1.0, hot)
             # typed in with the code: a cell shows him once its line of code has reached it
             ci = (np.arange(FCOLS)[None, :] + np.floor(self.code_v * t).astype(int)[:, None]) % FCOLS
             seen = t >= np.take_along_axis(self.code_tf, ci, 1)
@@ -1102,8 +1132,34 @@ class Film:
         return self.lyric_overlay(img, t)
 
 
+def voice_envelope(music):
+    """how loud the voice is per video frame, 0..1, for ultron's jaw: the voice band only, quick to open,
+    slower to close, so it follows the syllables"""
+    if not music: return None
+    sr = 16000
+    raw = subprocess.run([ffmpeg_bin(), "-v", "error", "-i", music, "-vn", "-ac", "1", "-ar", str(sr), "-f", "s16le", "-"],
+                         capture_output=True, check=True).stdout
+    x = np.frombuffer(raw, np.int16).astype(np.float32) / 32768
+    n = int(len(x) / sr * FPS)
+    hop = sr / FPS
+    win = int(hop) * 2
+    f = np.fft.rfftfreq(win, 1 / sr)
+    band = (f > 250) & (f < 3500)
+    e = np.zeros(n)
+    for i in range(n):
+        seg = x[int(i * hop):int(i * hop) + win]
+        if len(seg) < win: seg = np.pad(seg, (0, win - len(seg)))
+        e[i] = np.sqrt((np.abs(np.fft.rfft(seg * np.hanning(win)))[band] ** 2).mean())
+    lo, hi = np.percentile(e, 25), np.percentile(e, 96)
+    env = np.clip((e - lo) / (hi - lo + 1e-9), 0, 1) ** 0.8
+    out = np.zeros_like(env); a = 0.0
+    for i, v in enumerate(env):
+        a = v if v > a else a + (v - a) * 0.5
+        out[i] = a
+    return out
+
 def export(path, music, handle, lyrics):
-    film = Film(handle, lyrics)
+    film = Film(handle, lyrics, voice=voice_envelope(music))
     ff = ffmpeg_bin()
     cmd = [ff, "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W}x{H}",
            "-r", str(FPS), "-i", "-"]
