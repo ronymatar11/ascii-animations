@@ -5,7 +5,7 @@ One continuous camera, no cuts: each scene turns into the next.
 the curse of being human: red code types across the screen and the code is ultron (from a reference),
 written in the code itself, which streams across him with pulses of light running along it, his eyes
 glowing (he blinks once); he speaks the words: his jaw swings down on its hinge with the voice and his mouth
-opens along his own curved lip line, glowing inside; he leans in toward us, swaying, his head turning and
+opens along his own curved lip line, black inside; he leans in toward us, swaying, his head turning and
 nodding -> yet manufacture chaos: his eyes flare and catch fire, and the pixel flames (from a reference) spread
 out over him from there, the heat running ahead of a ragged burning edge ->
 they fear death: it burns through his face to the x-ray skull underneath (from a reference), where his head was,
@@ -529,9 +529,9 @@ class Film:
             PY = PY - hm * hw * 6.0 * math.sin(t * 0.8 + 0.5)
             PY = PY - hm * 2.5 * math.sin(t * 1.2) * (1 - hw)                     # breathing
             # he speaks: his jaw swings down on its hinge with the voice, and his mouth opens along his own lip
-            # line; it glows inside, like his eyes
+            # line; inside it is black
             v = self.voice_at(t) * hm
-            gap = np.zeros(PX.shape, bool); depth = np.zeros(PX.shape)
+            mouth = np.zeros(PX.shape, bool)
             if v > 0.02:
                 lip = np.interp(PX, ULT_LIP[:, 0], ULT_LIP[:, 1])
                 du, dw = PX - ULT_JAW[0], PY - ULT_JAW[1]
@@ -542,9 +542,8 @@ class Film:
                 jx = ULT_HINGE[0] + qx * np.cos(th) - qy * np.sin(th)
                 jy = ULT_HINGE[1] + qx * np.sin(th) + qy * np.cos(th)
                 ljaw = np.interp(jx, ULT_LIP[:, 0], ULT_LIP[:, 1])
-                gap = (th > 0) & (jy < ljaw)                                     # between the upper lip and the jaw
-                depth = np.clip(np.minimum(PY - lip, ljaw - jy) / 2.5, 0, 1)
-                PX = np.where(gap, PX, jx); PY = np.where(gap, PY, jy)
+                mouth = (th > 0) & (jy < ljaw)                                   # between the upper lip and the jaw
+                PX = np.where(mouth, PX, jx); PY = np.where(mouth, PY, jy)
             h, w = self.ultron.shape[:2]
             rgb = sample(self.ultron, np.clip(PX, 0, w - 1.01), np.clip(PY, 0, h - 1.01))
             fld = sample(self.ult_bg, np.clip(PX, 0, w - 1.01), np.clip(PY, 0, h - 1.01))
@@ -578,11 +577,7 @@ class Film:
             ucol = np.where((np.maximum(core, streak) > 0.25)[..., None], PALE,
                             np.where((halo > 0.12)[..., None], RED * 0.5 + HOT * 0.5, ucol))
             hot = np.maximum.reduce([core, halo, streak])
-            if gap.any():
-                mb = np.clip(0.3 + (0.35 + 0.4 * v) * depth, 0, 1)
-                ub = np.where(gap, mb, ub)
-                ucol = np.where(gap[..., None], np.where((depth > 0.55)[..., None], PALE * 0.4 + HOT * 0.6, HOT), ucol)
-                fld = np.where(gap, 0.0, fld); hot = np.where(gap, 1.0, hot)
+            fld = np.where(mouth, 0.0, fld)
             # typed in with the code: a cell shows him once its line of code has reached it
             ci = (np.arange(FCOLS)[None, :] + np.floor(self.code_v * t).astype(int)[:, None]) % FCOLS
             seen = t >= np.take_along_axis(self.code_tf, ci, 1)
@@ -609,6 +604,8 @@ class Film:
             gl = np.where(fon & (code > 0) & (hot < 0.25), code, gl)
             gl = np.where(fig, fill, gl)
             solid |= on & ~fon
+            dark = on & mouth                                                         # the open mouth: black
+            b = np.where(dark, 0.0, b); gl = np.where(dark, 0, gl); solid |= dark
 
         # the x-ray, revealed where the fire has burnt through; the reels spin, a scan line runs down it
         if t > 7.1:
