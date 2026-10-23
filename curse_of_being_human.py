@@ -19,11 +19,12 @@ lit cell (from a reference photo) comes up, the camera falls into it, dust rushi
 it lands on the bars on the hit, the hands rattle them ->
 own prisons: pull back, the prison is inside an eye -> perhaps the greatest flaw in your design: the eye is
 one of a wall of eyes darting about, blinking, then all turning to look at you -> is not your mortality: they look
-away again -> it is your extraordinary ability: they close, the camera comes back to the eye with the prison in it
-and it closes too; its lid line becomes the rope round a stone (from a reference drawing, etched with the same skin
-texture so the cut is seamless), and the camera pulls back up the string tied to it -> to remain alive: a butterfly
-on the end of the string beats its wings and pulls with everything on the hits, the string yanks it back, the
-stone barely rocks -> without ever truly living: it tires; the stone goes dark, the butterfly last.
+away again -> it is your extraordinary ability: they close, the camera settles on the eye with the prison in it
+and it closes too; the oval of the closed eye dissolves into the oval of a stone, the same size in the same place
+(from a reference drawing, etched with the same skin texture so the cut is seamless); a butterfly rests on the
+stone, opening and closing its wings -> to remain alive: it takes off and flies up, and on the hit the string
+tying it to the stone snaps tight -> without ever truly living: it beats its wings and pulls with everything, the
+string yanks it back, the stone barely rocks; it never gets free, and the video ends on it still trying.
 
 Export:   python curse_of_being_human.py --music voice.mp4 --export curse.mp4
 """
@@ -273,12 +274,12 @@ EU = 330.0
 LOGZ = [(12.6, math.log(0.7)), (13.3, math.log(1.4)), (13.85, math.log(3.0)), (14.05, math.log(3.85)),
         (14.35, math.log(3.95)), (15.4, math.log(1.9)),
         (16.7, math.log(1.0)), (17.6, math.log(0.5)), (18.8, math.log(0.36)), (20.0, math.log(0.33)),
-        (21.5, math.log(0.31)), (22.6, math.log(0.34)), (23.3, math.log(0.62)), (24.0, math.log(1.75)),
-        (24.45, math.log(2.3)), (24.85, math.log(2.38))]
+        (21.5, math.log(0.31)), (22.6, math.log(0.34)), (23.3, math.log(0.62)), (24.0, math.log(1.05)),
+        (24.45, math.log(1.12)), (25.1, math.log(1.14))]
 CX = [(12.6, 0.3), (14.4, 0.4), (16.0, 0.14), (17.6, 0.0), (19.0, 0.8), (20.5, 0.3), (21.8, -0.6),
       (22.8, -0.35), (23.6, -0.03), (24.2, 0.0), (24.85, 0.0)]
 CY = [(12.6, 0.3), (13.3, 0.13), (13.8, 0.04), (14.4, 0.09), (16.0, 0.04), (17.6, 0.2), (19.0, 0.9), (20.5, -0.4), (21.8, -0.9),
-      (22.8, -0.6), (23.6, 0.0), (24.0, 0.06), (24.4, -0.38), (24.85, -0.43)]
+      (22.8, -0.6), (23.6, 0.0), (24.0, -0.08), (24.45, -0.15), (25.1, -0.15)]
 ROLLB = [(12.6, -0.09), (13.6, 0.025), (14.6, -0.02), (16.0, 0.04), (17.6, 0.1), (19.5, -0.06), (21.0, 0.08), (22.6, 0.02),
          (23.6, 0.0), (30.55, 0.0)]
 # the eye with bars (reference photo): photo px per eye unit, the photo px at the eye's centre
@@ -286,20 +287,21 @@ PRI_U, PRI_E = 400.0, (690.0, 774.0)
 PRI_BAR = 0.3                                    # its middle bar, in eye units
 T_REVEAL = 12.72                                 # the camera reaches the cell: dust starts to show in its light
 BEATS = [(26.5, 0.8), (27.45, 0.48)]             # heart hits: the butterfly pulls hardest
-T_FADE = (29.55, 30.15, 30.5)                    # the end: it all goes dark, the butterfly last
 # the butterfly tied to a stone (drawing px, from a reference): the knot on the stone, where the string ties to its
 # body, its head, the box round it, the rope band round the stone, the foot the stone rocks on
 BF_KNOT, BF_TIE, BF_HEAD = (580.0, 1120.0), (1198.0, 548.0), (1288.0, 415.0)
 BF_BOX = (895, 240, 1345, 575)
 STONE_C, STONE_FOOT = (415.0, 1370.0), (410.0, 1600.0)
-BF_TUGS = [25.9, 26.5, 27.45, 28.35]             # it pulls with everything, and the string yanks it back
-# the match cut: the last eye closes, its lid line becomes the rope round the stone (bent like the lid at first,
-# then straight), and the camera pulls back up the string to the butterfly
-MCUT = (24.45, 24.85)
-STCAM_X = [(24.45, 415), (24.85, 415), (25.6, 520), (26.3, 680), (27.4, 760), (28.4, 765), (29.5, 800), (30.55, 900)]
-STCAM_Y = [(24.45, 1375), (24.85, 1376), (25.6, 1230), (26.3, 1060), (27.4, 1000), (28.4, 990), (29.5, 900), (30.55, 720)]
-STCAM_Z = [(24.45, math.log(2.9)), (24.85, math.log(2.85)), (25.6, math.log(1.5)), (26.3, math.log(0.92)), (27.4, math.log(0.74)),
-           (28.4, math.log(0.72)), (29.5, math.log(0.78)), (30.55, math.log(0.95))]
+BF_TUGS = [26.5, 27.45, 28.35, 29.3, 30.2]       # it pulls with everything, and the string yanks it back
+BF_REST = (590.0, 1128.0)                        # at first it rests on the stone, by the knot
+T_FLY = (25.5, 26.5)                             # it takes off, and on the hit the string snaps tight
+# the match cut: the last eye closes and the oval of the closed eye becomes the oval of the stone, the same size
+# in the same place; then the camera pulls back as the butterfly on it takes off
+MCUT = (24.45, 25.0)
+STCAM_X = [(24.45, 417), (25.0, 417), (25.7, 470), (26.4, 640), (27.4, 760), (28.4, 765), (29.5, 790), (30.55, 820)]
+STCAM_Y = [(24.45, 1407), (25.0, 1404), (25.7, 1300), (26.4, 1080), (27.4, 1000), (28.4, 990), (29.5, 950), (30.55, 900)]
+STCAM_Z = [(24.45, math.log(1.48)), (25.0, math.log(1.45)), (25.7, math.log(1.15)), (26.4, math.log(0.86)), (27.4, math.log(0.74)),
+           (28.4, math.log(0.73)), (29.5, math.log(0.78)), (30.55, math.log(0.84))]
 
 
 class Film:
@@ -1055,14 +1057,10 @@ class Film:
         # the match cut: the closed eye's lid line becomes the rope round the stone; it starts out bent along the
         # lid and straightens as the camera pulls back up the string to the butterfly
         if t > MCUT[0]:
-            k = 1 - float(smoother(MCUT[0], MCUT[1] + 0.4, t))
-            bend = 0.0
-            if k > 0:
-                ylo = lids(cam[0] + (SX - 540) / (EU * Z), 0.0)[1]
-                bend = -(ylo - cam[1]) * EU * Z * k
-            rb, rc, rg, rsolid = self.stone_scene(SX, SY, t, bend)
-            a = float(smoother(MCUT[0], MCUT[1], t))
-            b = b * (1 - a) + rb * a; col = col * (1 - a) + rc * a
+            rb, rc, rg, rsolid = self.stone_scene(SX, SY, t)
+            a = np.clip((t - MCUT[0]) / (MCUT[1] - MCUT[0]) + 0.3 * (self.rand - 0.5), 0, 1)
+            a = a * a * (3 - 2 * a)
+            b = b * (1 - a) + rb * a; col = col * (1 - a[..., None]) + rc * a[..., None]
             gl = np.where(a > 0.5, rg, gl); solid = np.where(a > 0.5, rsolid, solid)
         return b, col, gl, solid
 
@@ -1107,16 +1105,29 @@ class Film:
         th = th0 + 0.05 * math.sin(t * 1.3) + 0.025 * math.sin(t * 3.4) - 0.035 * tug + 0.01 * yank + 0.06 * tired
         px, py = BF_KNOT[0] + r * math.cos(th), BF_KNOT[1] + r * math.sin(th)
         rot = 0.12 * math.sin(t * 1.7) - 0.15 * tug + 0.05 * yank
-        speed = 7.0 * (1 + 0.6 * tug) * (1 - 0.55 * tired)
+        speed = 7.0 * (1 + 0.6 * tug) * (1 - 0.35 * tired)
         spread = 0.18 + 0.82 * abs(math.cos(math.pi * speed * t))
         rock = 0.012 * tug + 0.004 * yank
-        return (px, py), rot, spread, rock, slack * L0
+        sag = slack * L0
+        # before that: it rests on the stone, slowly opening and closing its wings, then takes off and flies up
+        # until the string runs out
+        p = float(smoother(T_FLY[0], T_FLY[1], t))
+        if p < 1:
+            q = p * p * (3 - 2 * p)
+            px = BF_REST[0] + (px - BF_REST[0]) * q + 20 * math.sin(t * 6) * 4 * p * (1 - p)
+            py = BF_REST[1] + (py - BF_REST[1]) * q + 30 * math.sin(t * 11) * 4 * p * (1 - p)
+            rot = rot * q - 0.15 * (1 - q)
+            rest_sp = 0.55 + 0.45 * math.cos(t * 1.6)
+            k8 = min(1.0, p * 8)
+            spread = (0.18 + 0.82 * abs(math.cos(math.pi * 9.0 * t))) * k8 + rest_sp * (1 - k8)
+            sag = min(L0 - math.hypot(px - BF_KNOT[0], py - BF_KNOT[1]), 260) * 0.6
+        return (px, py), rot, spread, rock, sag
 
-    def stone_scene(self, SX, SY, t, bend=0.0):
+    def stone_scene(self, SX, SY, t):
         shape = SX.shape
         cx, cy, z, rl = self.stone_cam(t)
         c, s = math.cos(rl), math.sin(rl)
-        dx, dy = SX - 540, SY - bend - 960
+        dx, dy = SX - 540, SY - 960
         AX = cx + (dx * c + dy * s) / z
         AY = cy + (-dx * s + dy * c) / z
         (bx, by), rot, spread, rock, sag = self.butterfly_pose(t)
@@ -1125,7 +1136,10 @@ class Film:
         qx, qy = AX - STONE_FOOT[0], AY - STONE_FOOT[1]
         RX = AX + ws * (qx * math.cos(rock) + qy * math.sin(rock) - qx)
         RY = AY + ws * (-qx * math.sin(rock) + qy * math.cos(rock) - qy)
-        rgb = sample(self.stone_plate, RX, RY)
+        h, w = self.stone_img.shape[:2]
+        def refl(v, n):
+            v = np.abs(v); return np.where(v > n - 2, 2 * (n - 2) - v, v)
+        rgb = sample(self.stone_plate, refl(RX, w), refl(RY, h))           # the paper runs on past its edges
         # the butterfly: moved and tilted to its pose, its wings folding about its body as it beats them
         ux, uy = AX - bx, AY - by
         cr, sr = math.cos(rot), math.sin(rot)
@@ -1142,9 +1156,7 @@ class Film:
         lum = rgb.mean(-1)
         b = np.clip((lum - 0.3) / 0.5, 0, 1) ** 1.7 * 0.9                # the paper red, the pencil dark
         # no page: the paper falls off into the dark around the stone and the butterfly, lit from above right
-        rr = np.hypot((AX - 720) / 1150, (AY - 1000) / 1150)
-        vig = 1 - sstep(0.45, 1.0, rr)
-        b = b * vig * (0.85 + 0.25 * np.clip((1000 - AY) / 700 + (AX - 600) / 1400, 0, 1))
+        b = b * (0.85 + 0.25 * np.clip((1000 - AY) / 700 + (AX - 600) / 1400, 0, 1))
         col = redmap(b)
         # etched like the skin it came out of: the same mottling and ink lines, matching the wall's at the cut
         ex0, ey0, sx0, sy0, kk = self.stone_uv
@@ -1154,17 +1166,10 @@ class Film:
         e = 1 - 0.75 * float(smoother(MCUT[1], 26.4, t))
         b = b * (1 - 0.28 * e + 0.4 * e * np.clip((fl - 0.44) / 0.56, 0, 1))
         b = np.where(ink, b * (1 - 0.85 * e), b)
-        # soften the edges of the picture into the dark
-        h, w = self.stone_img.shape[:2]
-        b = b * np.clip(np.minimum.reduce([AX, w - AX, AY, h - AY]) / 60, 0, 1)
-        # the end: the stone goes dark first, the butterfly last
-        bf = np.clip(ba[..., 0] * 3, 0, 1)
-        b = b * (bf * (1 - float(smoother(T_FADE[1], T_FADE[2], t))) + (1 - bf) * (1 - float(smoother(T_FADE[0], T_FADE[1], t))))
         gl = np.zeros(shape, np.int64)
         # the drawing is solid where it's lit: the stone, the butterfly and the pencil are dark shapes in it, not
         # holes the code shows through
-        solid = (b > 0.05) | (rr < 1.15)
-        solid &= float(smoother(T_FADE[1], T_FADE[2], t)) < 0.98
+        solid = np.ones(shape, bool)
         b = np.where(solid, b, 0.0)
         # the string, from the knot on the rocking stone up to its body: taut when it pulls, sagging when it rests
         kx_, ky_ = BF_KNOT[0] - STONE_FOOT[0], BF_KNOT[1] - STONE_FOOT[1]
@@ -1174,9 +1179,8 @@ class Film:
         PYs = kn[1] + (by - kn[1]) * u + 2.2 * sag * u * (1 - u)
         qx, qy = PXs - cx, PYs - cy
         Xs = 540 + z * (c * qx - s * qy); Ys = 960 + z * (s * qx + c * qy)
-        fade = 1 - float(smoother(T_FADE[0], T_FADE[1] + 0.2, t))
-        if fade > 0.02:
-            splat(gl, col, solid, Xs, Ys, HOT, b, 0.75 * fade)
+        if t > T_FLY[0]:                                          # resting, it lies coiled at the knot
+            splat(gl, col, solid, Xs, Ys, HOT, b, 0.75)
         return b, col.astype(np.float32), gl, solid
 
     # ---------- compose
@@ -1218,7 +1222,7 @@ class Film:
         empty = ~solid & (b < 0.035) & (gl == 0)
         cidx, ccol = self.code_layer(t, fi)
         pulse = sum(math.exp(-(t - tb) / 0.2) for tb, _ in BEATS if t >= tb)     # the heartbeat lights the room
-        ccol = ccol * (1 + 2.5 * pulse) * (1 - float(smoother(T_FADE[0], T_FADE[1], t)))
+        ccol = ccol * (1 + 2.5 * pulse)
         # brighter: the picture lifts a lot, the code behind it a little, so it stays behind
         col = np.where(empty[..., None], brighten(ccol, 1.6, 1.0), brighten(col, 1.35, 0.8))
         idx = np.where(empty, cidx, idx)

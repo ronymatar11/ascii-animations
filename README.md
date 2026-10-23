@@ -45,9 +45,9 @@ them onto a painting of a dark figure in a burning field, its eyes where his wer
 an x-ray skull with a cassette for a brain;
 the tape unspools down to money on a string; the string snaps, the money falls and the camera
 falls after it into a cell with hands gripping the bars; the prison is inside an eye, the eye is one of a wall of eyes that dart about and blink,
-turn to look at you, look away, then close; the eye with the prison closes last and its lid line becomes the
-rope round a stone; the camera follows the string up to a butterfly tied to it, beating its wings, pulling,
-stuck, until it all goes dark. Ultron, the figure in the field, x-ray, money, the eye with bars and the butterfly on the stone
+turn to look at you, look away, then close; the eye with the prison closes last and becomes a stone; a butterfly
+resting on it takes off, the string tying it to the stone snaps tight, and it pulls and pulls, stuck, to the
+last frame. Ultron, the figure in the field, x-ray, money, the eye with bars and the butterfly on the stone
 come from reference images in `assets/`, drawn in code. No captions by default (`--lyrics` types
 the lyrics out as subtitles).
 ```
