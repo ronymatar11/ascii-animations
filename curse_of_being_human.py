@@ -19,10 +19,9 @@ lit cell (from a reference photo) comes up, the camera falls into it, dust rushi
 it lands on the bars on the hit, the hands rattle them ->
 own prisons: pull back, the prison is inside an eye -> perhaps the greatest flaw in your design: the eye is
 one of a wall of eyes darting about, blinking, then all turning to look at you -> is not your mortality: they look
-away again -> it is your extraordinary ability: they close, the camera settles on the eye with the prison in it
-and it closes too; the oval of the closed eye dissolves into the oval of a stone, the same size in the same place
-(from a reference drawing, etched with the same skin texture so the cut is seamless); a butterfly rests on the
-stone, opening and closing its wings -> to remain alive: it takes off and flies up, and on the hit the string
+away again -> it is your extraordinary ability: they close, all but the eye with the prison in it; the camera
+dives into it, between the bars, into the dark of the cell until the frame is dark; that dark is the shadowed side
+of a stone (from a reference drawing), and the camera pulls back out of it: a butterfly rests on the stone, opening and closing its wings -> to remain alive: it takes off and flies up, and on the hit the string
 tying it to the stone snaps tight -> without ever truly living: it beats its wings and pulls with everything, the
 string yanks it back, the stone barely rocks; it never gets free, and the video ends on it still trying.
 
@@ -274,12 +273,12 @@ EU = 330.0
 LOGZ = [(12.6, math.log(0.7)), (13.3, math.log(1.4)), (13.85, math.log(3.0)), (14.05, math.log(3.85)),
         (14.35, math.log(3.95)), (15.4, math.log(1.9)),
         (16.7, math.log(1.0)), (17.6, math.log(0.5)), (18.8, math.log(0.36)), (20.0, math.log(0.33)),
-        (21.5, math.log(0.31)), (22.6, math.log(0.34)), (23.3, math.log(0.62)), (24.0, math.log(1.05)),
-        (24.45, math.log(1.12)), (25.1, math.log(1.14))]
+        (21.5, math.log(0.31)), (22.6, math.log(0.34)), (23.3, math.log(0.62)), (24.0, math.log(1.35)),
+        (24.4, math.log(3.4)), (24.75, math.log(14.0))]
 CX = [(12.6, 0.3), (14.4, 0.4), (16.0, 0.14), (17.6, 0.0), (19.0, 0.8), (20.5, 0.3), (21.8, -0.6),
-      (22.8, -0.35), (23.6, -0.03), (24.2, 0.0), (24.85, 0.0)]
+      (22.8, -0.35), (23.6, -0.03), (24.2, 0.08), (24.75, 0.1)]
 CY = [(12.6, 0.3), (13.3, 0.13), (13.8, 0.04), (14.4, 0.09), (16.0, 0.04), (17.6, 0.2), (19.0, 0.9), (20.5, -0.4), (21.8, -0.9),
-      (22.8, -0.6), (23.6, 0.0), (24.0, -0.08), (24.45, -0.15), (25.1, -0.15)]
+      (22.8, -0.6), (23.6, 0.0), (24.0, -0.04), (24.4, -0.06), (24.75, -0.06)]
 ROLLB = [(12.6, -0.09), (13.6, 0.025), (14.6, -0.02), (16.0, 0.04), (17.6, 0.1), (19.5, -0.06), (21.0, 0.08), (22.6, 0.02),
          (23.6, 0.0), (30.55, 0.0)]
 # the eye with bars (reference photo): photo px per eye unit, the photo px at the eye's centre
@@ -295,12 +294,12 @@ STONE_C, STONE_FOOT = (415.0, 1370.0), (410.0, 1600.0)
 BF_TUGS = [26.5, 27.45, 28.35, 29.3, 30.2]       # it pulls with everything, and the string yanks it back
 BF_REST = (590.0, 1128.0)                        # at first it rests on the stone, by the knot
 T_FLY = (25.5, 26.5)                             # it takes off, and on the hit the string snaps tight
-# the match cut: the last eye closes and the oval of the closed eye becomes the oval of the stone, the same size
-# in the same place; then the camera pulls back as the butterfly on it takes off
-MCUT = (24.45, 25.0)
-STCAM_X = [(24.45, 417), (25.0, 417), (25.7, 470), (26.4, 640), (27.4, 760), (28.4, 765), (29.5, 790), (30.55, 820)]
-STCAM_Y = [(24.45, 1407), (25.0, 1404), (25.7, 1300), (26.4, 1080), (27.4, 1000), (28.4, 990), (29.5, 950), (30.55, 900)]
-STCAM_Z = [(24.45, math.log(1.48)), (25.0, math.log(1.45)), (25.7, math.log(1.15)), (26.4, math.log(0.86)), (27.4, math.log(0.74)),
+# the cut: the camera dives into the dark of the cell inside the last open eye until the frame is all dark; that
+# dark is the shadowed side of a stone, and the camera pulls back out of it to the stone with a butterfly on it
+MCUT = (24.55, 24.75)
+STCAM_X = [(24.55, 322), (24.75, 324), (25.2, 360), (25.7, 470), (26.4, 640), (27.4, 760), (28.4, 765), (29.5, 790), (30.55, 820)]
+STCAM_Y = [(24.55, 1540), (24.75, 1536), (25.2, 1460), (25.7, 1300), (26.4, 1080), (27.4, 1000), (28.4, 990), (29.5, 950), (30.55, 900)]
+STCAM_Z = [(24.55, math.log(9.0)), (24.75, math.log(7.0)), (25.2, math.log(2.4)), (25.7, math.log(1.15)), (26.4, math.log(0.86)), (27.4, math.log(0.74)),
            (28.4, math.log(0.73)), (29.5, math.log(0.78)), (30.55, math.log(0.84))]
 
 
@@ -822,7 +821,7 @@ class Film:
         dist = np.array([math.hypot(x, y) for x, y, _, _ in eyes])
         self.eye_open = 16.85 + 0.05 * dist
         self.eye_close = 22.85 + 0.9 * (1 - dist / dist.max())           # outside in
-        self.eye_close[0] = 24.0                                          # the hero eye last, with the camera on it
+        self.eye_close[0] = 99.0                                          # the hero eye stays open: we dive into it
         self.eye_ph = rng.uniform(0, 6.3, len(eyes))
         # where each eye looks: a new spot every so often, reached in a quick jump, like real eyes do
         self.gaze = []
@@ -1058,9 +1057,8 @@ class Film:
         # lid and straightens as the camera pulls back up the string to the butterfly
         if t > MCUT[0]:
             rb, rc, rg, rsolid = self.stone_scene(SX, SY, t)
-            a = np.clip((t - MCUT[0]) / (MCUT[1] - MCUT[0]) + 0.3 * (self.rand - 0.5), 0, 1)
-            a = a * a * (3 - 2 * a)
-            b = b * (1 - a) + rb * a; col = col * (1 - a[..., None]) + rc * a[..., None]
+            a = float(smoother(MCUT[0], MCUT[1], t))                     # dark into dark
+            b = b * (1 - a) + rb * a; col = col * (1 - a) + rc * a
             gl = np.where(a > 0.5, rg, gl); solid = np.where(a > 0.5, rsolid, solid)
         return b, col, gl, solid
 
@@ -1082,7 +1080,9 @@ class Film:
         kx, ky = BF_TIE[0] - BF_KNOT[0], BF_TIE[1] - BF_KNOT[1]
         u = np.clip(((xx - BF_KNOT[0]) * kx + (yy - BF_KNOT[1]) * ky) / (kx * kx + ky * ky), 0, 1)
         dline = np.hypot(xx - BF_KNOT[0] - u * kx, yy - BF_KNOT[1] - u * ky)
-        hole = (a > 0.05) | ((dline < 9) & (u > 0.03))
+        lum_b = np.asarray(Image.fromarray((lum * 255).astype(np.uint8)).filter(ImageFilter.BoxBlur(18)), np.float32) / 255.0
+        hole = (a > 0.05) | ((dline < 7) & (u > 0.02)) | ((dline < 30) & (u > 0.02) & (u < 1.02) & (lum < lum_b - 0.04))
+        hole = np.asarray(Image.fromarray((hole * 255).astype(np.uint8)).filter(ImageFilter.MaxFilter(5))) > 127
         self.stone_plate = fill_rows(img, hole, blur=5, seed=9)
         # the box's etching: the skin texture, lined up with the wall's at the cut
         tm = (MCUT[0] + MCUT[1]) / 2
@@ -1163,7 +1163,7 @@ class Film:
         U = ex0 + (AX - sx0) * kk
         V = ey0 - (cy + (-dx * s + (SY - 960) * c) / z - sy0) * kk
         fl, ink = self.flesh(U, V, t, z / (kk * EU))
-        e = 1 - 0.75 * float(smoother(MCUT[1], 26.4, t))
+        e = 0.5 * (1 - float(smoother(MCUT[1], 26.0, t)))
         b = b * (1 - 0.28 * e + 0.4 * e * np.clip((fl - 0.44) / 0.56, 0, 1))
         b = np.where(ink, b * (1 - 0.85 * e), b)
         gl = np.zeros(shape, np.int64)
