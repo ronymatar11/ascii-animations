@@ -20,10 +20,10 @@ it lands on the bars on the hit, the hands rattle them ->
 own prisons: pull back, the prison is inside an eye -> perhaps the greatest flaw in your design: the eye is
 one of a wall of eyes darting about, blinking, then all turning to look at you -> is not your mortality: they look
 away again -> it is your extraordinary ability: they close, the camera comes back to the eye with the prison in it
-and it closes too; its lid line becomes the seam of a closed ring box (from a reference, etched with the same
-skin texture so the cut is seamless), and pulling back, two hands hold the box -> to remain alive: the fingers come down on the lid and on the hit lift it, the box opening
-like the eye did, an Esc key inside, its light pulsing with the heart -> without ever truly living: it is never
-pressed; the hands and the box go dark, the key's light last.
+and it closes too; its lid line becomes the rope round a stone (from a reference drawing, etched with the same skin
+texture so the cut is seamless), and the camera pulls back up the string tied to it -> to remain alive: a butterfly
+on the end of the string beats its wings and pulls with everything on the hits, the string yanks it back, the
+stone barely rocks -> without ever truly living: it tires; the stone goes dark, the butterfly last.
 
 Export:   python curse_of_being_human.py --music voice.mp4 --export curse.mp4
 """
@@ -241,6 +241,20 @@ def dome(img, pad=40):
     cap = top * (1 + 0.2 * np.exp(-np.maximum(inside, 0) / 6)) * np.clip(inside / 8, 0, 1)
     return np.concatenate([cap.astype(np.float32), img]), pad
 
+def fill_rows(img, hole, blur=6, seed=7):
+    """paint out the hole in a picture: each row filled across from either side of it, softened, grain put back"""
+    plate = img.copy()
+    cols = np.arange(img.shape[1])
+    for y in np.nonzero(hole.any(1))[0]:
+        k = ~hole[y]
+        if k.sum() < 2: continue
+        for c in range(img.shape[2]):
+            plate[y, hole[y], c] = np.interp(cols[hole[y]], cols[k], img[y, k, c])
+    soft = np.asarray(Image.fromarray((np.clip(plate, 0, 1) * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(blur)),
+                      np.float32) / 255.0
+    grain = np.random.default_rng(seed).normal(0, 0.045, plate.shape[:2]).astype(np.float32)[..., None]
+    return np.where(hole[..., None], np.clip(soft + grain, 0, 1), img)
+
 def sample(img, PX, PY):
     """bilinear sample of an (h, w) or (h, w, c) image at float px; zero outside"""
     h, w = img.shape[:2]
@@ -271,23 +285,21 @@ ROLLB = [(12.6, -0.09), (13.6, 0.025), (14.6, -0.02), (16.0, 0.04), (17.6, 0.1),
 PRI_U, PRI_E = 400.0, (690.0, 774.0)
 PRI_BAR = 0.3                                    # its middle bar, in eye units
 T_REVEAL = 12.72                                 # the camera reaches the cell: dust starts to show in its light
-BEATS = [(26.5, 0.8), (27.45, 0.48)]             # heart hits: the box's light pulses
-# the ring box (reference image px): lid hinge, how deep it lies closed, how tall it stands open, its sides
-HINGE, LID_D, LID_H, LID_TOP = 510, 135, 280, 230
-LID_X, BASE_X = (372, 612), (368, 630)
-KEY_BOX, KEY_C = (395, 600, 505, 645), (497, 560)
-T_OPEN = 26.45                                   # the lid opens on the hit
-T_FADE = (29.55, 30.15, 30.5)                    # the end: the picture goes dark, the Esc key's light last
-LID_T = 0.95                                     # how long the lid takes to open
-FING_TIP = 252                                   # the two fingers on the lid: where their tips rest, and their outline
-FING_POLY = [(262, 30), (520, 30), (578, 180), (578, 296), (372, 302), (282, 135), (264, 75)]
-# the match cut: the last eye closes, its lid line becomes the seam of the closed box (bent like the lid at
-# first, then straight), the camera pulls back to the hands holding it; it opens like the eye did
+BEATS = [(26.5, 0.8), (27.45, 0.48)]             # heart hits: the butterfly pulls hardest
+T_FADE = (29.55, 30.15, 30.5)                    # the end: it all goes dark, the butterfly last
+# the butterfly tied to a stone (drawing px, from a reference): the knot on the stone, where the string ties to its
+# body, its head, the box round it, the rope band round the stone, the foot the stone rocks on
+BF_KNOT, BF_TIE, BF_HEAD = (580.0, 1120.0), (1198.0, 548.0), (1288.0, 415.0)
+BF_BOX = (895, 240, 1345, 575)
+STONE_C, STONE_FOOT = (415.0, 1370.0), (410.0, 1600.0)
+BF_TUGS = [25.9, 26.5, 27.45, 28.35]             # it pulls with everything, and the string yanks it back
+# the match cut: the last eye closes, its lid line becomes the rope round the stone (bent like the lid at first,
+# then straight), and the camera pulls back up the string to the butterfly
 MCUT = (24.45, 24.85)
-BOXCAM_X = [(24.45, 499), (24.85, 499), (25.6, 498), (26.3, 497), (27.4, 496), (28.4, 494), (30.55, 497)]
-BOXCAM_Y = [(24.45, 645), (24.85, 646), (25.6, 700), (26.3, 744), (27.4, 600), (28.4, 525), (29.5, 545), (30.55, 565)]
-BOXCAM_Z = [(24.45, math.log(6.9)), (24.85, math.log(6.95)), (25.6, math.log(4.9)), (26.3, math.log(3.8)), (27.4, math.log(2.45)),
-            (28.4, math.log(1.45)), (29.5, math.log(1.75)), (30.55, math.log(2.2))]
+STCAM_X = [(24.45, 415), (24.85, 415), (25.6, 520), (26.3, 680), (27.4, 760), (28.4, 765), (29.5, 800), (30.55, 900)]
+STCAM_Y = [(24.45, 1375), (24.85, 1376), (25.6, 1230), (26.3, 1060), (27.4, 1000), (28.4, 990), (29.5, 900), (30.55, 720)]
+STCAM_Z = [(24.45, math.log(2.9)), (24.85, math.log(2.85)), (25.6, math.log(1.5)), (26.3, math.log(0.92)), (27.4, math.log(0.74)),
+           (28.4, math.log(0.72)), (29.5, math.log(0.78)), (30.55, math.log(0.95))]
 
 
 class Film:
@@ -325,7 +337,7 @@ class Film:
         self.setup_embers(rng)
         self.setup_prison()
         self.setup_wall(rng)
-        self.setup_box()
+        self.setup_stone()
 
     # ---------- the page of code behind everything
     def build_code(self, rng):
@@ -431,18 +443,7 @@ class Film:
         hole = np.asarray(m) > 127
         for fx, fy in FIELD_EYES:
             hole |= np.hypot(xx - fx, yy - fy) < 16
-        # each row is filled across from the sky or the wheat on either side of it, smoothed, with the grain put back
-        plate = img.copy()
-        cols = np.arange(w)
-        for y in np.nonzero(hole.any(1))[0]:
-            k = ~hole[y]
-            if k.sum() < 2: continue
-            for c in range(3):
-                plate[y, hole[y], c] = np.interp(cols[hole[y]], cols[k], img[y, k, c])
-        soft = np.asarray(Image.fromarray((np.clip(plate, 0, 1) * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(6)),
-                          np.float32) / 255.0
-        grain = np.random.default_rng(7).normal(0, 0.045, plate.shape[:2]).astype(np.float32)[..., None]
-        plate = np.where(hole[..., None], np.clip(soft + grain, 0, 1), img)
+        plate = fill_rows(img, hole)                                   # the sky and the wheat carried in behind it
         self.field_plate = plate
 
     def field_scene(self, SX, SY, t):
@@ -1051,135 +1052,132 @@ class Film:
         if t < T_B + 0.4:                                         # the money falls on out of frame
             self.money_layer(b, col, gl, solid, t, SX, SY, self.snap_hang)
 
-        # the match cut: the closed eye's lid line becomes the seam of a closed ring box; the seam starts out
-        # bent along the lid and straightens as the camera pulls back to the hands holding the box
+        # the match cut: the closed eye's lid line becomes the rope round the stone; it starts out bent along the
+        # lid and straightens as the camera pulls back up the string to the butterfly
         if t > MCUT[0]:
             k = 1 - float(smoother(MCUT[0], MCUT[1] + 0.4, t))
             bend = 0.0
             if k > 0:
                 ylo = lids(cam[0] + (SX - 540) / (EU * Z), 0.0)[1]
                 bend = -(ylo - cam[1]) * EU * Z * k
-            rb, rc, rg, rsolid = self.box_scene(SX, SY, t, bend)
+            rb, rc, rg, rsolid = self.stone_scene(SX, SY, t, bend)
             a = float(smoother(MCUT[0], MCUT[1], t))
             b = b * (1 - a) + rb * a; col = col * (1 - a) + rc * a
             gl = np.where(a > 0.5, rg, gl); solid = np.where(a > 0.5, rsolid, solid)
         return b, col, gl, solid
 
-    # ---------- the ending: a ring box (from a reference) opens, an Esc key inside, its light breathing; it goes dark
-    def setup_box(self):
+    # ---------- the ending: a butterfly (from a reference drawing) tied to a stone; it tries to fly, it can't
+    def setup_stone(self):
         here = os.path.dirname(os.path.abspath(__file__))
-        img = np.asarray(Image.open(os.path.join(here, "assets", "esc_box.png")).convert("RGB"), np.float32) / 255.0
-        self.box_img = img
+        img = np.asarray(Image.open(os.path.join(here, "assets", "butterfly_stone.png")).convert("RGB"), np.float32) / 255.0
+        self.stone_img = img
         h, w = img.shape[:2]
-        mx, mn = img.max(-1), img.min(-1)
-        red = (mx - mn) > 0.2
-        # the two fingers that hold the lid, whole, with their outlines
         yy, xx = np.mgrid[0:h, 0:w]
-        pm = Image.new("L", (w, h), 0)
-        ImageDraw.Draw(pm).polygon(FING_POLY, fill=255)
-        strip = np.asarray(pm) > 127
-        skin = strip & ~red & (img.mean(-1) > 0.26)
-        m = Image.fromarray((skin * 255).astype(np.uint8)).filter(ImageFilter.MaxFilter(7)).filter(ImageFilter.MinFilter(3))
-        fing = (np.asarray(m) > 127) & strip & ~red
-        self.fing = fing.astype(np.float32)
-        # the plate: the open lid and the fingers taken out, and the dark backdrop of the picture (its grain,
-        # mirrored from an empty corner) put where they were, so both can move
-        plate = img.copy()
-        lidreg = (xx > LID_X[0] - 6) & (xx < LID_X[1] + 6) & (yy > LID_TOP - 4) & (yy < HINGE + 3) & red
-        hole = lidreg | fing
-        tex = img[0:270, 690:960]
-        th, tw = tex.shape[:2]
-        ty = yy % (2 * th); ty = np.where(ty >= th, 2 * th - 1 - ty, ty)
-        tx = xx % (2 * tw); tx = np.where(tx >= tw, 2 * tw - 1 - tx, tx)
-        plate[hole] = tex[ty[hole], tx[hole]]
-        self.box_plate = plate
-        # the box is etched like the skin it comes out of: the skin's texture, lined up with the wall's at the cut
+        lum = img.mean(-1)
+        x0, y0, x1, y1 = BF_BOX
+        inbox = (xx > x0) & (xx < x1) & (yy > y0) & (yy < y1)
+        a = np.clip((0.72 - lum) / 0.12, 0, 1) * inbox
+        a = np.asarray(Image.fromarray((a * 255).astype(np.uint8)).filter(ImageFilter.MaxFilter(5))
+                       .filter(ImageFilter.GaussianBlur(1.5)), np.float32) / 255.0
+        self.bf_alpha = a
+        # the plate: the butterfly and its string painted out, so both can move
+        kx, ky = BF_TIE[0] - BF_KNOT[0], BF_TIE[1] - BF_KNOT[1]
+        u = np.clip(((xx - BF_KNOT[0]) * kx + (yy - BF_KNOT[1]) * ky) / (kx * kx + ky * ky), 0, 1)
+        dline = np.hypot(xx - BF_KNOT[0] - u * kx, yy - BF_KNOT[1] - u * ky)
+        hole = (a > 0.05) | ((dline < 9) & (u > 0.03))
+        self.stone_plate = fill_rows(img, hole, blur=5, seed=9)
+        # the box's etching: the skin texture, lined up with the wall's at the cut
         tm = (MCUT[0] + MCUT[1]) / 2
-        ce, cb = self.cam_b(tm), self.box_cam(tm)
-        self.box_uv = (ce[0], ce[1], cb[0], cb[1], cb[2] / (EU * ce[2]))
+        ce, cs = self.cam_b(tm), self.stone_cam(tm)
+        self.stone_uv = (ce[0], ce[1], cs[0], cs[1], cs[2] / (EU * ce[2]))
 
-    def box_cam(self, t):
-        cx, cy = ckey(t, BOXCAM_X), ckey(t, BOXCAM_Y)
-        z = math.exp(ckey(t, BOXCAM_Z)) * 1080 / self.box_img.shape[1]     # screen px per image px
-        return cx, cy, z, 0.02 * math.sin(t * 0.8) * float(smoother(MCUT[1], MCUT[1] + 1.0, t))
+    def stone_cam(self, t):
+        rl = 0.02 * math.sin(t * 0.8) * float(smoother(MCUT[1], MCUT[1] + 1.0, t))
+        return ckey(t, STCAM_X), ckey(t, STCAM_Y), math.exp(ckey(t, STCAM_Z)), rl
 
-    def lid_angle(self, t):
-        x = (t - T_OPEN) / LID_T
-        if x <= 0: return 0.0
-        if x < 1: return math.pi / 2 * (1 - (1 - x) ** 2) ** 1.6       # eases off the hit, eases into place
-        a = t - T_OPEN - LID_T
-        return math.pi / 2 + 0.03 * math.exp(-a / 0.2) * math.sin(a * 14)
+    def butterfly_pose(self, t):
+        """the butterfly's tie point, its tilt, how far its wings are open, the stone's rock, and the string's slack"""
+        kx, ky = BF_TIE[0] - BF_KNOT[0], BF_TIE[1] - BF_KNOT[1]
+        L0, th0 = math.hypot(kx, ky), math.atan2(ky, kx)
+        tug = max(math.exp(-((t - tb) / 0.16) ** 2) for tb in BF_TUGS)
+        yank = sum(math.exp(-(t - tb) / 0.12) * math.sin((t - tb) * 30) for tb in BF_TUGS if t > tb)
+        tired = float(smoother(28.7, 29.9, t))                                  # in the end it nearly gives up
+        slack = (0.045 + 0.03 * math.sin(t * 2.3)) * (1 - tug) * (1 - 0.5 * tired) + 0.02 * tired
+        r = L0 * (1 - slack + 0.012 * tug)
+        th = th0 + 0.05 * math.sin(t * 1.3) + 0.025 * math.sin(t * 3.4) - 0.035 * tug + 0.01 * yank + 0.06 * tired
+        px, py = BF_KNOT[0] + r * math.cos(th), BF_KNOT[1] + r * math.sin(th)
+        rot = 0.12 * math.sin(t * 1.7) - 0.15 * tug + 0.05 * yank
+        speed = 7.0 * (1 + 0.6 * tug) * (1 - 0.55 * tired)
+        spread = 0.18 + 0.82 * abs(math.cos(math.pi * speed * t))
+        rock = 0.012 * tug + 0.004 * yank
+        return (px, py), rot, spread, rock, slack * L0
 
-    def box_scene(self, SX, SY, t, bend=0.0):
+    def stone_scene(self, SX, SY, t, bend=0.0):
         shape = SX.shape
-        cx, cy, z, rl = self.box_cam(t)
+        cx, cy, z, rl = self.stone_cam(t)
         c, s = math.cos(rl), math.sin(rl)
         dx, dy = SX - 540, SY - bend - 960
         AX = cx + (dx * c + dy * s) / z
         AY = cy + (-dx * s + dy * c) / z
-        on_key = (AX > KEY_BOX[0]) & (AX < KEY_BOX[1]) & (AY > KEY_BOX[2]) & (AY < KEY_BOX[3])
-        rgb = sample(self.box_plate, AX, AY)
-        # the lid: closed it lies over the opening (we see its top), opening it swings up on its hinge
-        th = self.lid_angle(t)
-        ye = HINGE + LID_D * math.cos(th) - LID_H * math.sin(th)
-        # the box under the lid sits in its shadow until it's open
-        o = math.sin(min(th, math.pi / 2))
-        under = (AX > BASE_X[0]) & (AX < BASE_X[1]) & (AY > HINGE) & (AY < HINGE + LID_D + 20)
-        rgb = np.where(under[..., None], rgb * (0.3 + 0.7 * o), rgb)
-        lx0 = BASE_X[0] + (LID_X[0] - BASE_X[0]) * o                 # the lid's sides follow it round
-        lx1 = BASE_X[1] + (LID_X[1] - BASE_X[1]) * o
-        if ye > HINGE + 1:                                       # its outside: the same red card as the box
-            m = (AX > lx0) & (AX < lx1) & (AY > HINGE) & (AY < ye)
-            f = np.clip((AY - HINGE) / (ye - HINGE), 0, 1)
-            face = sample(self.box_img, AX, 668 + 70 * f) * (1.05 - 0.25 * f)[..., None] * (1 - 0.35 * o)
-            lip = m & (AY > ye - 16 * (1 - o))
-            face = np.where(lip[..., None], face * 0.7, face)
-            edge = m & ((np.abs(AX - lx0) < 2.5) | (np.abs(AX - lx1) < 2.5) | (np.abs(AY - ye) < 2.5))
-            face = np.where(edge[..., None], 0.05, face)
-            rgb = np.where(m[..., None], face, rgb)
-        elif ye < HINGE - 1:                                     # its inside, squashed until it's fully up
-            m = (AX > lx0) & (AX < lx1) & (AY > ye) & (AY < HINGE)
-            IY = HINGE - (HINGE - AY) * (HINGE - LID_TOP) / (HINGE - ye)
-            IX = LID_X[0] + (AX - lx0) * (LID_X[1] - LID_X[0]) / (lx1 - lx0)
-            lid = sample(self.box_img, IX, IY) * (0.55 + 0.45 * o)
-            rgb = np.where(m[..., None], lid, rgb)
-        # the two fingers come down onto the closed lid, then ride its edge: they lift it and hold it open
-        dfin = max(ye - FING_TIP, 0.0) + 7 * math.exp(-((t - T_OPEN + 0.12) / 0.1) ** 2)
-        FY = AY - dfin + 430 * (1 - float(smoother(25.25, 26.15, t)))
-        fa = sample(self.fing, AX, FY)
-        if (fa > 0.5).any():
-            fa = np.where(fa > 0.5, 1.0, 0.0) * (1 - (dfin > 1) * (1 - sstep(30, 120, FY)))   # lowered, they come out of the dark
-            rgb = rgb * (1 - fa[..., None]) + sample(self.box_img, AX, FY) * fa[..., None]
-        # light spills out of the opened box, pulses with the heart, then keeps breathing
-        pulse = sum(math.exp(-(t - tb) / 0.22) for tb, _ in BEATS if t >= tb)
-        breath = float(smoother(27.6, 28.4, t)) * (0.5 + 0.5 * math.sin((t - 28.4) * 3.3))
-        d = np.hypot(AX - KEY_C[0], (AY - KEY_C[1]) * 1.3)
-        glow = o * (0.5 + 0.5 * pulse + 0.3 * breath) * np.exp(-d / 85)
-        mx = rgb.max(-1); mn = rgb.min(-1)
-        b = np.clip((mx - 0.13) / 0.8, 0, 1) ** 1.05
-        red = (mx - mn) > 0.22
-        white = mn > 0.72
-        col = np.where(red[..., None], rgb / (mx[..., None] + 0.02), redmap(b * 0.95))
-        col = np.where(white[..., None], PALE, col)
+        (bx, by), rot, spread, rock, sag = self.butterfly_pose(t)
+        # the stone rocks on its foot when the string yanks
+        ws = 1 - sstep(0.9, 1.3, np.hypot((AX - STONE_C[0]) / 430, (AY - STONE_C[1]) / 320))
+        qx, qy = AX - STONE_FOOT[0], AY - STONE_FOOT[1]
+        RX = AX + ws * (qx * math.cos(rock) + qy * math.sin(rock) - qx)
+        RY = AY + ws * (-qx * math.sin(rock) + qy * math.cos(rock) - qy)
+        rgb = sample(self.stone_plate, RX, RY)
+        # the butterfly: moved and tilted to its pose, its wings folding about its body as it beats them
+        ux, uy = AX - bx, AY - by
+        cr, sr = math.cos(rot), math.sin(rot)
+        LX = BF_TIE[0] + ux * cr + uy * sr
+        LY = BF_TIE[1] - ux * sr + uy * cr
+        ax_, ay_ = BF_HEAD[0] - BF_TIE[0], BF_HEAD[1] - BF_TIE[1]
+        al = math.hypot(ax_, ay_); nx, ny = ay_ / al, -ax_ / al          # across the body, toward the wings
+        dperp = (LX - BF_TIE[0]) * nx + (LY - BF_TIE[1]) * ny
+        wing = dperp > 0
+        LX = np.where(wing, LX - nx * dperp * (1 - 1 / spread), LX)
+        LY = np.where(wing, LY - ny * dperp * (1 - 1 / spread), LY)
+        ba = sample(self.bf_alpha, LX, LY)[..., None]
+        rgb = rgb * (1 - ba) + sample(self.stone_img, LX, LY) * ba
+        lum = rgb.mean(-1)
+        b = np.clip((lum - 0.3) / 0.5, 0, 1) ** 1.7 * 0.9                # the paper red, the pencil dark
+        # no page: the paper falls off into the dark around the stone and the butterfly, lit from above right
+        rr = np.hypot((AX - 720) / 1150, (AY - 1000) / 1150)
+        vig = 1 - sstep(0.45, 1.0, rr)
+        b = b * vig * (0.85 + 0.25 * np.clip((1000 - AY) / 700 + (AX - 600) / 1400, 0, 1))
+        col = redmap(b)
         # etched like the skin it came out of: the same mottling and ink lines, matching the wall's at the cut
-        ex0, ey0, bx0, by0, kk = self.box_uv
-        U = ex0 + (AX - bx0) * kk
-        V = ey0 - (cy + (-dx * s + (SY - 960) * c) / z - by0) * kk
+        ex0, ey0, sx0, sy0, kk = self.stone_uv
+        U = ex0 + (AX - sx0) * kk
+        V = ey0 - (cy + (-dx * s + (SY - 960) * c) / z - sy0) * kk
         fl, ink = self.flesh(U, V, t, z / (kk * EU))
-        e = 1 - 0.6 * float(smoother(MCUT[1], 26.4, t))                 # strong at the cut, lighter once it's a box
-        b = b * (1 - 0.28 * e + 0.4 * e * np.clip((fl - 0.44) / 0.56, 0, 1)) * np.where(red, 1 - 0.18 * e, 1.0)
-        b = np.where(ink & ~(white & (t > 25.6)), b * (1 - 0.88 * e), b)
-        b = np.clip(b + 0.6 * glow * (on_key | (b < 0.2)), 0, 1)
-        col = np.where(((glow > 0.12) & ~red & ~white)[..., None], HOT, col)
+        e = 1 - 0.75 * float(smoother(MCUT[1], 26.4, t))
+        b = b * (1 - 0.28 * e + 0.4 * e * np.clip((fl - 0.44) / 0.56, 0, 1))
+        b = np.where(ink, b * (1 - 0.85 * e), b)
         # soften the edges of the picture into the dark
-        h, w = self.box_img.shape[:2]
-        edge = np.clip(np.minimum.reduce([AX, w - AX, AY, h - AY]) / 45, 0, 1)
-        b = b * edge
-        # the end: the hands and the box go dark, the Esc key and its light last
-        lit = np.clip(np.maximum(on_key, glow / 0.35), 0, 1)
-        b = b * (lit * (1 - float(smoother(T_FADE[1], T_FADE[2], t))) + (1 - lit) * (1 - float(smoother(T_FADE[0], T_FADE[1], t))))
-        solid = b > 0.05
-        return np.where(solid, b, 0.0), col.astype(np.float32), np.zeros(shape, np.int64), solid
+        h, w = self.stone_img.shape[:2]
+        b = b * np.clip(np.minimum.reduce([AX, w - AX, AY, h - AY]) / 60, 0, 1)
+        # the end: the stone goes dark first, the butterfly last
+        bf = np.clip(ba[..., 0] * 3, 0, 1)
+        b = b * (bf * (1 - float(smoother(T_FADE[1], T_FADE[2], t))) + (1 - bf) * (1 - float(smoother(T_FADE[0], T_FADE[1], t))))
+        gl = np.zeros(shape, np.int64)
+        # the drawing is solid where it's lit: the stone, the butterfly and the pencil are dark shapes in it, not
+        # holes the code shows through
+        solid = (b > 0.05) | (rr < 1.15)
+        solid &= float(smoother(T_FADE[1], T_FADE[2], t)) < 0.98
+        b = np.where(solid, b, 0.0)
+        # the string, from the knot on the rocking stone up to its body: taut when it pulls, sagging when it rests
+        kx_, ky_ = BF_KNOT[0] - STONE_FOOT[0], BF_KNOT[1] - STONE_FOOT[1]
+        kn = (STONE_FOOT[0] + kx_ * math.cos(rock) - ky_ * math.sin(rock), STONE_FOOT[1] + kx_ * math.sin(rock) + ky_ * math.cos(rock))
+        u = np.linspace(0, 1, 400)
+        PXs = kn[0] + (bx - kn[0]) * u
+        PYs = kn[1] + (by - kn[1]) * u + 2.2 * sag * u * (1 - u)
+        qx, qy = PXs - cx, PYs - cy
+        Xs = 540 + z * (c * qx - s * qy); Ys = 960 + z * (s * qx + c * qy)
+        fade = 1 - float(smoother(T_FADE[0], T_FADE[1] + 0.2, t))
+        if fade > 0.02:
+            splat(gl, col, solid, Xs, Ys, HOT, b, 0.75 * fade)
+        return b, col.astype(np.float32), gl, solid
 
     # ---------- compose
     def lyric_overlay(self, img, t):
