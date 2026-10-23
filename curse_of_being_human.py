@@ -256,7 +256,7 @@ BOXCAM_Z = [(24.45, math.log(6.9)), (24.85, math.log(6.95)), (25.6, math.log(4.9
 
 
 class Film:
-    def __init__(self, handle="@rony_matar", lyrics=True, seed=5):
+    def __init__(self, handle="", lyrics=True, seed=5):
         rng = np.random.default_rng(seed)
         self.handle, self.lyrics = handle, lyrics
         self.rand = rng.random((FROWS, FCOLS))
@@ -1102,7 +1102,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--export", default="curse_of_being_human.mp4")
     ap.add_argument("--music", default=None, help="the spoken-word track (an audio file or a video with it)")
-    ap.add_argument("--handle", default="@rony_matar")
+    ap.add_argument("--handle", default="", help="a handle typed at the very end (none by default)")
     ap.add_argument("--no-lyrics", action="store_true")
     a = ap.parse_args()
     export(a.export, a.music, a.handle, not a.no_lyrics)
