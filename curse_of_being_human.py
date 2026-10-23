@@ -11,8 +11,9 @@ out over him from there, the heat running ahead of a ragged burning edge ->
 they fear death: it burns through his face to the x-ray skull underneath (from a reference), where his head was,
 a cassette for a brain ->
 yet waste their lives: the tape unspools, the camera follows it down to money on a string (from a reference) ->
-they demand freedom: the string snaps, the money falls and the camera falls after it, down into a cell
-(from a reference photo) -> then construct their: the hands rattle the bars ->
+they demand freedom: the string snaps, the money falls and the camera falls after it; far below in the dark a
+lit cell (from a reference photo) comes up, the camera falls into it, dust rushing past -> then construct their:
+it lands on the bars on the hit, the hands rattle them ->
 own prisons: pull back, the prison is inside an eye -> perhaps the greatest flaw in your design: the eye is
 one of a wall of eyes darting about, blinking, then all turning to look at you -> is not your mortality: they look
 away again -> it is your extraordinary ability: they close, the camera comes back to the eye with the prison in it
@@ -237,15 +238,16 @@ def sample(img, PX, PY):
 
 # ------------------------------------------------------------------ scene B camera (eye units)
 EU = 330.0
-LOGZ = [(12.6, math.log(3.5)), (13.4, math.log(3.75)), (14.3, math.log(3.95)), (15.4, math.log(1.9)),
+LOGZ = [(12.6, math.log(0.7)), (13.3, math.log(1.4)), (13.85, math.log(3.0)), (14.05, math.log(3.85)),
+        (14.35, math.log(3.95)), (15.4, math.log(1.9)),
         (16.7, math.log(1.0)), (17.6, math.log(0.5)), (18.8, math.log(0.36)), (20.0, math.log(0.33)),
         (21.5, math.log(0.31)), (22.6, math.log(0.34)), (23.3, math.log(0.62)), (24.0, math.log(1.75)),
         (24.45, math.log(2.3)), (24.85, math.log(2.38))]
 CX = [(12.6, 0.3), (14.4, 0.4), (16.0, 0.14), (17.6, 0.0), (19.0, 0.8), (20.5, 0.3), (21.8, -0.6),
       (22.8, -0.35), (23.6, -0.03), (24.2, 0.0), (24.85, 0.0)]
-CY = [(12.6, 1.3), (12.9, 0.95), (13.3, 0.3), (13.8, 0.03), (14.4, 0.09), (16.0, 0.04), (17.6, 0.2), (19.0, 0.9), (20.5, -0.4), (21.8, -0.9),
+CY = [(12.6, 0.3), (13.3, 0.13), (13.8, 0.04), (14.4, 0.09), (16.0, 0.04), (17.6, 0.2), (19.0, 0.9), (20.5, -0.4), (21.8, -0.9),
       (22.8, -0.6), (23.6, 0.0), (24.0, 0.06), (24.4, -0.38), (24.85, -0.43)]
-ROLLB = [(12.6, 0), (13.6, 0.025), (14.6, -0.02), (16.0, 0.04), (17.6, 0.1), (19.5, -0.06), (21.0, 0.08), (22.6, 0.02),
+ROLLB = [(12.6, -0.09), (13.6, 0.025), (14.6, -0.02), (16.0, 0.04), (17.6, 0.1), (19.5, -0.06), (21.0, 0.08), (22.6, 0.02),
          (23.6, 0.0), (30.55, 0.0)]
 # the eye with bars (reference photo): photo px per eye unit, the photo px at the eye's centre
 PRI_U, PRI_E = 400.0, (690.0, 774.0)
@@ -352,22 +354,14 @@ class Film:
         return np.where(ok, v, 0.0)
 
     def setup_prison(self):
-        # the string the money hung from lines up with the middle bar in the photo
         _, self.snap_hang = self.tape(T_SNAP)
-        X, Y = self.tape(T_B)[0]
-        vis = (Y > 0) & (Y < H)
-        sx = float(X[vis].mean()) if vis.any() else self.snap_hang[0]
-        Z0 = math.exp(ckey(T_B, LOGZ))
-        cx0 = PRI_BAR - (sx - 540) / (EU * Z0)
-        self.CXK = [(T_B, cx0), (13.6, PRI_BAR)] + [k for k in CX if k[0] >= 14.4]
-        cy0 = ckey(T_B, CY)
-        self.string_y0 = cy0 - (self.snap_hang[1] + self.pan_since_snap(T_B) - 960) / (EU * Z0)
-        self.string_k = 1.0 / (EU * Z0)
+        # falling after the money, the camera falls into the cell, aimed at its middle
+        self.CXK = [(T_B, 0.33), (13.6, PRI_BAR)] + [k for k in CX if k[0] >= 14.4]
         self.impacts = [(T_SNAP, 6.0)]
         rng = np.random.default_rng(23)
         n = 140
         self.dust = dict(x=rng.uniform(-0.3, 0.95, n), y=rng.uniform(-0.6, 0.6, n), vx=rng.normal(0.01, 0.02, n),
-                         vy=rng.uniform(-0.05, 0.02, n), ph=rng.uniform(0, 6.3, n))
+                         vy=rng.uniform(-0.05, 0.02, n), ph=rng.uniform(0, 6.3, n), z=rng.random(n) ** 2)
 
     def setup_tape(self):
         # the tape hangs straight; once the camera has panned, the money hangs in the middle of the frame
@@ -380,7 +374,7 @@ class Film:
         P = 960 - (y0 + TAPE_L[-1][1] + off[1] * K_M0)
         # ... and after the snap the camera keeps going down after the falling money
         self.PAN = [(0, 0), (9.35, 0), (9.9, 0.12 * P), (10.6, 0.58 * P), (11.3, 0.93 * P), (T_SNAP, P),
-                    (12.25, P - 330), (T_B, P - 780)]
+                    (12.25, P - 330), (T_B, P - 780), (13.1, P - 1420)]
         # the money only exists on the tape once its end is out of frame
         self.t_att = 12.0
         for tt in np.arange(9.2, 10.4, 0.01):
@@ -782,9 +776,10 @@ class Film:
         return b, inside
 
     def prison_layer(self, X, Y, t, fi):
-        """the string becomes the middle bar, the cell decodes in around it, the camera pulls back to the eye"""
+        """the camera falls into the cell out of the dark, lands on the bars, then pulls back to the eye"""
         shape = X.shape
         b, inside = self.prison_photo(X, Y, t)
+        b = b * float(smoother(T_B, T_B + 0.55, t))                  # it comes up out of the dark
         # close up it's only the cell: the eye around it stays dark until the camera pulls back
         vig = 1 - float(smoother(14.4, 15.8, t))
         e = ((X - 0.29) / 0.82) ** 2 + ((Y - 0.04) / 0.75) ** 2
@@ -804,23 +799,16 @@ class Film:
         rng = np.random.default_rng(fi + 5)
         gl = np.where(dec, rng.choice(PRINTABLE, shape), gl)
         b = np.where(dec, 0.8, b); col = np.where(dec[..., None], HOT, col)
-        # the string, swinging back from the snap, thickening into the bar
-        if t < 13.6:
-            Z = math.exp(ckey(t, LOGZ))
-            ye = self.string_y0 + self.string_end(t) * self.string_k
-            sw = 0.004 * math.sin(t * 9) * math.exp(-(t - T_SNAP) / 0.6)
-            k = 0.0
-            hw = max(0.0016, 0.5 * FCW / (EU * Z))
-            st = (np.abs(X - PRI_BAR - sw * (1 - k)) < hw) & (Y > ye) & ~on
-            b = np.where(st, 0.9 - 0.3 * k, b); col = np.where(st[..., None], HOT, col)
-            gl = np.where(st & (k < 0.5), CI["|"], gl)
-        # dust drifting through the light
+        # dust drifting through the light, some of it far nearer the camera than the cell: falling in,
+        # the near dust rushes past much faster than the cell grows
         if cw > 0 and t > T_REVEAL:
             d = self.dust
             age = t - T_REVEAL
             px_ = (d["x"] + d["vx"] * age + 0.01 * np.sin(age * 1.7 + d["ph"]) - (-0.3)) % 1.25 + (-0.3)
             py_ = (d["y"] + d["vy"] * age + 0.6) % 1.2 - 0.6
-            SXd, SYd = self.from_eye(px_, py_, self.cam_b(t))
+            cx, cy, Zc, rl = self.cam_b(t)
+            near = 1 + 2.2 * d["z"]
+            SXd, SYd = self.from_eye(cx + (px_ - cx) * near, cy + (py_ - cy) * near, (cx, cy, Zc, rl))
             r = ((SYd - FOY) / FCH).astype(int); c = (SXd / FCW).astype(int)
             ok = (r >= 0) & (r < FROWS) & (c >= 0) & (c < FCOLS)
             r, c = r[ok], c[ok]
@@ -957,6 +945,9 @@ class Film:
             mm = m[..., None]
             b = pb * m + b * (1 - m); col = pc * mm + col * (1 - mm)
             gl = np.where(m > 0.5, pg, gl); solid = np.where(m > 0.5, ps, solid)
+
+        if t < T_B + 0.4:                                         # the money falls on out of frame
+            self.money_layer(b, col, gl, solid, t, SX, SY, self.snap_hang)
 
         # the match cut: the closed eye's lid line becomes the seam of a closed ring box; the seam starts out
         # bent along the lid and straightens as the camera pulls back to the hands holding the box
