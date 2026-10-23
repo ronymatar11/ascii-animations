@@ -1180,7 +1180,7 @@ class Film:
         qx, qy = PXs - cx, PYs - cy
         Xs = 540 + z * (c * qx - s * qy); Ys = 960 + z * (s * qx + c * qy)
         if t > T_FLY[0]:                                          # resting, it lies coiled at the knot
-            splat(gl, col, solid, Xs, Ys, HOT, b, 0.75)
+            splat(gl, col, solid, Xs, Ys, np.zeros(3, np.float32), b, 0.0)        # a black line on the red paper
         return b, col.astype(np.float32), gl, solid
 
     # ---------- compose
