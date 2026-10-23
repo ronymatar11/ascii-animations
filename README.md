@@ -38,7 +38,7 @@ and every pulse follows its beat. `--start` picks where to cut the track (negati
 python second_sun.py --music chihiro.mp3 --export second_sun.mp4
 ```
 
-## 4. The Curse of Being Human (9:16, red and black, cut to a spoken-word track)
+## 4. The Curse of Being Human (9:16, red, orange and black, cut to a spoken-word track)
 One continuous camera, no cuts, every scene turns into the next: red code types across the screen
 and becomes Ultron, eyes glowing, leaning in toward us, his head turning; his eyes flare and the fire spreads from them
 over him and burns him away in sparks to an x-ray skull with a cassette for a brain;

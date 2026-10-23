@@ -1,5 +1,5 @@
 """
-The Curse of Being Human  |  9:16, red and black, every frame is text, cut to a spoken-word track.
+The Curse of Being Human  |  9:16, red, orange and black, every frame is text, cut to a spoken-word track.
 One continuous camera, no cuts: each scene turns into the next.
 
 the curse of being human: red code types across the screen and the code is ultron (from a reference),
@@ -67,6 +67,14 @@ POOL = [
     "design.flaws.append(you)", "time.sleep(life)", "if not living: continue", "0x00 0xDE 0xAD",
 ]
 
+
+# the final grade: reds go pure red, the warm highlights (the paler colours) go orange, a little brighter
+def grade(col):
+    R = np.clip(col[..., 0] * 1.25, 0, 1)
+    w = col[..., 1] / (col[..., 0] + 1e-4)                      # how warm/pale it was: 0 deep red .. 1 white
+    G = R * np.interp(w, [0.0, 0.18, 0.45, 0.75, 1.0], [0.0, 0.03, 0.24, 0.4, 0.55])
+    B = R * np.interp(w, [0.0, 0.8, 1.0], [0.0, 0.02, 0.25])
+    return np.stack([R, G, B], -1).astype(np.float32)
 
 def redmap(b):
     b = np.clip(b, 0, 1)[..., None]
@@ -1076,7 +1084,7 @@ class Film:
         pulse = sum(math.exp(-(t - tb) / 0.2) for tb, _ in BEATS if t >= tb)     # the heartbeat lights the room
         ccol = ccol * (1 + 2.5 * pulse) * (1 - float(smoother(T_FADE[0], T_FADE[1], t)))
         idx = np.where(empty, cidx, idx); col = np.where(empty[..., None], ccol, col)
-        img = render_fine(idx, col.astype(np.float32))
+        img = render_fine(idx, grade(col))
         return self.lyric_overlay(img, t)
 
 
