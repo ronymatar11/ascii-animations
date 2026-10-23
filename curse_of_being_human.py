@@ -3,7 +3,8 @@ The Curse of Being Human  |  9:16, red, orange and black, every frame is text, c
 One continuous camera, no cuts: each scene turns into the next.
 
 the curse of being human: red code types across the screen and the code is ultron (from a reference),
-written in the scrolling code itself, his eyes glowing (he blinks once); he leans in toward us, swaying, his head turning and
+written in the code itself, which streams across him with pulses of light running along it, his eyes
+glowing (he blinks once); he leans in toward us, swaying, his head turning and
 nodding -> yet manufacture chaos: his eyes flare and catch fire, and the pixel flames (from a reference) spread
 out over him from there, the heat running ahead of a ragged burning edge ->
 they fear death: it burns through his face to the x-ray skull underneath (from a reference), where his head was,
@@ -522,10 +523,12 @@ class Film:
             fb = np.clip((rgb[..., 0] - 0.05) / 0.8, 0, 1) ** 0.85                  # him: shaded, darks pushed down
             # he is written in the code too, brighter than the field; the field fades out softly around him
             fb = np.clip(fb * 1.3, 0, 1) ** 0.9
-            ub = fld * 0.4 * np.clip((0.5 - near) / 0.38, 0, 1) ** 1.2 + (1 - fld) * fb
+            ub = fld * 0.3 * np.clip((0.5 - near) / 0.38, 0, 1) ** 1.2 + (1 - fld) * fb
             white = rgb.min(-1) > 0.55
             ub = np.where(white, 1.0, ub)
-            ucol = np.where(white[..., None], PALE, np.where((fld > 0.5)[..., None], RED, redmap(np.minimum(fb * 1.15, 1))))
+            lit = np.clip(fb * 1.25 - 0.25, 0, 1)[..., None] ** 1.2              # his lit side goes orange, his shade red
+            ucol = np.where(white[..., None], PALE, np.where((fld > 0.5)[..., None], RED * 0.42,     # the field sits back
+                            redmap(np.minimum(fb * 1.15, 1)) * (1 - lit) + HOT * lit))
             # his eyes burn brighter and brighter, then flare: the fire starts there
             flare = float(smoother(4.55, 5.0, t)) * math.exp(-max(t - 5.0, 0.0) / 0.35)
             de = np.minimum.reduce([np.hypot(PX - ex, PY - ey) for ex, ey in ULT_EYES])
@@ -556,10 +559,21 @@ class Film:
             b = np.where(on & ~gap, ub, b); col = np.where(on[..., None], ucol, col)
             # every cell of him is a letter of the scrolling code; only his darkest shadows and the gaps
             # between words fall back to plain shading
-            fill = np.where(code > 0, code, np.roll(code, 5, axis=0))               # his gaps take the next line's letters
-            fill = np.where(fill > 0, fill, np.roll(code, 11, axis=1))
+            # on him the code runs: its lines stream past four times faster than the field's, pulses of light
+            # run along them like data, and letters keep flipping as it rewrites itself
+            cj = (np.arange(FCOLS)[None, :] + np.floor(self.code_v * t * 4 + 7).astype(int)[:, None]) % FCOLS
+            run = np.take_along_axis(self.code_idx, cj, 1)
+            fill = np.where(run > 0, run, np.roll(run, 5, axis=0))                 # his gaps take the next line's letters
+            fill = np.where(fill > 0, fill, np.roll(run, 11, axis=1))
+            rng = np.random.default_rng(fi + 17)
+            fill = np.where(rng.random((FROWS, FCOLS)) < 0.06, rng.choice(PRINTABLE, (FROWS, FCOLS)), fill)
+            fig = on & ~fon & (fill > 0) & (hot < 0.25) & (fb > 0.12)
+            rr = np.arange(FROWS)[:, None]; cc = np.arange(FCOLS)[None, :]
+            pulse = np.maximum(0, np.sin(cc * 0.11 * np.sign(self.code_v)[:, None] - t * 9 + rr * 1.7)) ** 10
+            b = np.where(fig, np.clip(b * (1 + 0.9 * pulse), 0, 1), b)
+            col = np.where((fig & (pulse > 0.5))[..., None], col * 0.4 + HOT * 0.6, col)
             gl = np.where(fon & (code > 0) & (hot < 0.25), code, gl)
-            gl = np.where(on & ~fon & (fill > 0) & (hot < 0.25) & (fb > 0.12), fill, gl)
+            gl = np.where(fig, fill, gl)
             solid |= on & ~fon
 
         # the x-ray, revealed where the fire has burnt through; the reels spin, a scan line runs down it
