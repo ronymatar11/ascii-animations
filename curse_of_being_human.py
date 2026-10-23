@@ -6,10 +6,12 @@ the curse of being human: red code types across the screen and the code is ultro
 written in the code itself, which streams across him with pulses of light running along it, his eyes
 glowing (he blinks once); he speaks the words: his jaw swings down on its hinge with the voice and his mouth
 opens along his own curved lip line, black inside; he leans in toward us, swaying, his head turning and
-nodding -> yet manufacture chaos: his eyes flare and catch fire, and the pixel flames (from a reference) spread
-out over him from there, the heat running ahead of a ragged burning edge ->
-they fear death: it burns through his face to the x-ray skull underneath (from a reference), where his head was,
-a cassette for a brain ->
+nodding -> yet manufacture chaos: his eyes flare and catch, and a burning edge spreads out over him from
+them; behind it is a painting (from a reference) of a dark figure in a field, its two white eyes exactly where
+his were; the camera turns level and pulls back: the figure stands in the wheat, which burns like flames and sways,
+the clouds drift, the smear round its head flutters ->
+they fear death: the figure burns through, from its eyes, to the x-ray skull underneath (from a reference), its
+eye socket where the figure's eyes were, a cassette for a brain; the camera pushes in on it ->
 yet waste their lives: the tape unspools, the camera follows it down to money on a string (from a reference) ->
 they demand freedom: the string snaps, the money falls and the camera falls after it; far below in the dark a
 lit cell (from a reference photo) comes up, the camera falls into it, dust rushing past -> then construct their:
@@ -58,6 +60,7 @@ HOT = np.array([1.0, 0.60, 0.52], np.float32)
 PALE = np.array([1.0, 0.86, 0.82], np.float32)
 DOTS = np.array(sorted([CI[c] for c in ".:oO0@"], key=lambda i: FATLAS[i].mean()))
 SHADE = np.array(sorted([CI[c] for c in ".:-=+*#%@"], key=lambda i: FATLAS[i].mean()))   # smooth shading, no letters
+STALK = np.array(sorted([CI[c] for c in ":;!|lI1H#"], key=lambda i: FATLAS[i].mean()))     # upright strokes: wheat, flames
 
 POOL = [
     "def human(): return curse", "while alive: pursue(peace)", "chaos = manufacture(peace)",
@@ -199,19 +202,27 @@ ULT_MDIR = (0.819, -0.573)                       # along the mouth, front corner
 ULT_LEAN, ULT_HIP = (235.0, 170.0), (300.0, 620.0)   # he leans in toward us about his face, sways about his hips
 ULT_EYES = [(243.0, 120.0), (191.0, 156.0)]
 ULT_HEAD = [(165, 100), (178, 80), (200, 66), (236, 60), (258, 68), (278, 86), (300, 88), (300, 130), (170, 130)]
-# "yet manufacture chaos": his eyes flare and the fire spreads out from them
+# "yet manufacture chaos": his eyes flare and a burning edge spreads out from them; behind it is the painting of
+# a dark figure in a field (from a reference), its two white eyes exactly where his were
 T_SPREAD = 5.05
-FIRE_O = [(553.0, 365.0), (353.0, 504.0)]        # his eyes, on screen, when they catch
+FIRE_O = [(546.0, 359.0), (401.0, 447.0)]        # his eyes, on screen, when they catch
+FIELD_EYES = [(646.6, 564.1), (729.0, 553.7)]    # the figure's eyes in the painting
+FIELD_EM = (687.8, 558.9)                        # between them
+# the painting's camera: where its eyes are on screen, screen px per painting px, its tilt. it starts lined up with
+# ultron's eyes (his face is tilted), turns level and pulls back to the whole figure in the field
+FIELD_EX = [(5.0, 473.5), (5.7, 485.0), (6.5, 505.0), (7.4, 509.0), (8.5, 511.0)]
+FIELD_EY = [(5.0, 403.0), (5.7, 440.0), (6.5, 495.0), (7.4, 508.0), (8.5, 511.0)]
+FIELD_K = [(5.0, math.log(2.04)), (5.7, math.log(1.55)), (6.5, math.log(1.08)), (7.4, math.log(0.95)), (8.5, math.log(0.93))]
+FIELD_R = [(5.0, -0.419), (5.7, -0.2), (6.5, -0.03), (7.4, 0.0), (8.5, 0.0)]
 # the x-ray: screen px per image px, the head's centre on screen, the reels, where the drawn tape ends
-# at first it sits where his head was, the size of his head; then the camera settles on it
-SKULL_K = [(7.0, 1.0), (7.8, 1.03), (8.6, 1.3), (9.2, 1.5), (12.6, 1.5)]
-SKULL_HY = [(7.0, 470), (7.8, 478), (8.6, 640), (9.2, 860), (12.6, 880)]
+# at first it sits in the figure's head, its eye socket where the figure's eyes were; then the camera pushes in on it
+SKULL_K = [(7.0, 0.62), (7.8, 0.66), (8.6, 1.3), (9.2, 1.5), (12.6, 1.5)]
+SKULL_HY = [(7.0, 424), (7.8, 430), (8.6, 640), (9.2, 860), (12.6, 880)]
 SKULL_E = (300.0, 240.0)
 REELS = [((243.0, 120.0), 40.0), ((368.0, 146.0), 62.0)]
 SKULL_DOME = (308.8, 179.5, 296.8, 203.0)        # the ellipse of the skull's outline, for the top the photo crops off
 TAPE0 = (250.0, 415.0)
 TAPE_L = [(9.2, 0), (9.45, 400), (9.7, 1200), (9.95, 2080), (10.15, 2260), (10.4, 2140), (10.7, 2190), (11.2, 2175), (12.6, 2175)]
-FIRE_K = 2.0                                     # fire pattern, screen px per image px
 # the money photo: the string's top, the point that ends up at the centre of the screen, scale and tilt
 MONEY_KNOT, MONEY_C = (159.0, 0.0), (200.0, 350.0)   # money photo px: the string's top, the stack's middle
 K_M0 = 1.9                                       # screen px per photo px
@@ -297,14 +308,15 @@ class Film:
         self.ult_bg = np.asarray(fld.filter(ImageFilter.GaussianBlur(1.2)), np.float32) / 255.0
         fig = Image.fromarray(255 - np.asarray(fld))
         self.ult_near = np.asarray(fig.filter(ImageFilter.GaussianBlur(7)), np.float32) / 255.0
-        self.fire = np.asarray(Image.open(os.path.join(here, "assets", "fire.png")).convert("RGB"), np.float32) / 255.0
+        self.field = np.asarray(Image.open(os.path.join(here, "assets", "shadow_field.png")).convert("RGB"), np.float32) / 255.0
         self.skull, self.skull_pad = dome(np.asarray(Image.open(os.path.join(here, "assets", "skull_xray.png")).convert("L"), np.float32) / 255.0)
         self.money = np.asarray(Image.open(os.path.join(here, "assets", "money.png")).convert("RGBA"), np.float32) / 255.0
         self.prison = np.asarray(Image.open(os.path.join(here, "assets", "eye_bars.png")).convert("L"), np.float32) / 255.0
         self.build_code(rng)
         # the fire eats him from his eyes outward
-        # "they fear death": it burns through to the skull, from his eyes outward
-        self.T_burn = 7.35 + 1.05 * np.clip(self.fire_dist(FGX, FGY) / 1500, 0, 1) + 0.3 * (fbm(FGX / 150, FGY / 150, 3, 19) - 0.5)
+        # "they fear death": the figure burns through to the skull, from its eyes outward
+        ex, ey, _, _ = self.field_cam(7.4)
+        self.T_burn = 7.35 + 1.05 * np.clip(np.hypot(FGX - ex, FGY - ey) / 1500, 0, 1) + 0.3 * (fbm(FGX / 150, FGY / 150, 3, 19) - 0.5)
         self.setup_tape()
         self.setup_embers(rng)
         self.setup_prison()
@@ -372,7 +384,7 @@ class Film:
         k = ckey(11.5, SKULL_K)
         off = (MONEY_C[0] - MONEY_KNOT[0], MONEY_C[1] - MONEY_KNOT[1])
         hxf = 540 - off[0] * K_M0 - (TAPE0[0] - SKULL_E[0]) * k
-        self.HXS = [(7.0, 515), (7.8, 520), (8.8, 545), (10.6, hxf), (12.6, hxf)]
+        self.HXS = [(7.0, 338), (7.8, 342), (8.8, 545), (10.6, hxf), (12.6, hxf)]
         self.PAN = [(0, 0)]
         y0 = ckey(11.5, SKULL_HY) + (TAPE0[1] - SKULL_E[1]) * k
         P = 960 - (y0 + TAPE_L[-1][1] + off[1] * K_M0)
@@ -396,13 +408,57 @@ class Film:
         d = [np.hypot(SX - fx, np.where(SY < fy, (SY - fy) * 0.65, SY - fy)) for fx, fy in FIRE_O]
         return np.minimum.reduce(d)
 
+    def field_cam(self, t):
+        return ckey(t, FIELD_EX), ckey(t, FIELD_EY), math.exp(ckey(t, FIELD_K)), ckey(t, FIELD_R)
+
+    def field_to_screen(self, PX, PY, t):
+        ex, ey, k, r = self.field_cam(t)
+        qx, qy = (PX - FIELD_EM[0]) * k, (PY - FIELD_EM[1]) * k
+        return ex + qx * math.cos(r) - qy * math.sin(r), ey + qx * math.sin(r) + qy * math.cos(r)
+
+    def field_scene(self, SX, SY, t):
+        """the painting of the dark figure in the field: the wheat sways like flames, the clouds drift, the smear
+        around its head flutters, its eyes glow"""
+        ex, ey, k, r = self.field_cam(t)
+        dx, dy = (SX - ex) / k, (SY - ey) / k
+        c, s_ = math.cos(r), math.sin(r)
+        PX = FIELD_EM[0] + dx * c + dy * s_
+        PY = FIELD_EM[1] - dx * s_ + dy * c
+        img = self.field
+        rgb0 = sample(img, PX, PY)
+        lum0 = rgb0 @ np.array([0.3, 0.59, 0.11], np.float32)
+        fig = np.clip((0.3 - lum0) / 0.2, 0, 1)                         # the figure and its smear
+        tt = t - 5.0
+        wind = (6 + 5 * np.sin(PX / 160 + tt * 0.8)) * np.sin(tt * 2.6 - PX / 90 + PY / 260) * np.clip((PY - 850) / 250, 0, 1)
+        drift = 14 * tt * np.clip((800 - PY) / 200, 0, 1)
+        flutter = 5 * np.sin(tt * 5 + PY / 22 + PX / 90) * np.clip((760 - PY) / 200, 0, 1)
+        bg = sample(img, PX - wind - drift, PY)
+        fg = sample(img, PX - flutter, PY + 2 * np.sin(tt * 3 + PX / 50) * np.clip((760 - PY) / 200, 0, 1))
+        rgb = bg * (1 - fig[..., None]) + fg * fig[..., None]
+        R, G, B = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+        lum = 0.3 * R + 0.59 * G + 0.11 * B
+        warm = np.clip((R - B) / 0.4, 0, 1)                            # the wheat: it burns
+        white = np.clip((rgb.min(-1) - 0.6) / 0.25, 0, 1) * (1 - warm)  # the clouds
+        flick = 0.88 + 0.14 * np.sin(tt * 11 + PX / 40 - PY / 60)
+        # the sky goes dark, the clouds pale, the wheat bright: its yellow strokes the brightest, like flames
+        wheat = np.clip((G - 0.3) / 0.45, 0, 1) * flick * np.clip(lum / 0.35, 0, 1)
+        sky = 0.12 + 0.75 * white
+        b = np.clip(warm * (0.42 + 0.58 * wheat) + (1 - warm) * sky, 0, 1) * np.clip((lum - 0.06) / 0.12, 0, 1)
+        col = warm[..., None] * (RED * (1 - wheat[..., None]) + HOT * wheat[..., None]) + \
+              (1 - warm[..., None]) * (RED * 0.6 * (1 - white[..., None]) + PALE * 0.8 * white[..., None])
+        gl = np.where((warm > 0.5) & (b > 0.06), STALK[np.clip((b * len(STALK)).astype(int), 0, len(STALK) - 1)], 0)
+        eyes = sum(np.exp(-np.hypot(PX - fx, PY - fy) / 9.0) for fx, fy in FIELD_EYES) * (1.3 + 0.2 * math.sin(t * 2.2))
+        hot = eyes > 0.3
+        b = np.maximum(b, np.clip(eyes, 0, 1)); col = np.where(hot[..., None], PALE, col); gl = np.where(hot, 0, gl)
+        inside = (PX >= 0) & (PX < img.shape[1] - 1) & (PY >= 0) & (PY < img.shape[0] - 1)
+        return np.where(inside, b, 0.0), col.astype(np.float32), np.where(inside, gl, 0)
+
     def setup_embers(self, rng):
-        """sparks and ash from burning ultron: start points on him, at the locked camera"""
-        lit = self.ultron[..., 0] < 0.35
+        """sparks and ash from the burning figure: start points on it, where the camera has it when it burns"""
+        lit = self.field.max(-1) < 0.25
         ys, xs = np.nonzero(lit)
         pick = rng.choice(len(xs), 1400, replace=False)
-        sx = 540 + (xs[pick] - ULT_C[0]) * ULT_K
-        sy = 960 + (ys[pick] - ULT_C[1]) * ULT_K
+        sx, sy = self.field_to_screen(xs[pick].astype(float), ys[pick].astype(float), 7.5)
         r = np.clip(((sy - FOY) / FCH).astype(int), 0, FROWS - 1); c = np.clip((sx / FCW).astype(int), 0, FCOLS - 1)
         self.emb = dict(x=sx, y=sy, t0=self.T_burn[r, c] + rng.uniform(-0.05, 0.15, len(sx)),
                         vx=rng.normal(0, 45, len(sx)), vy=-rng.uniform(70, 260, len(sx)),
@@ -625,8 +681,8 @@ class Film:
             col = np.where(on[..., None], redmap(bb), col)
             solid |= burnt & (ink > 0.03)
 
-        # fire: it catches in his eyes and spreads out over him from there, slowly at first; the heat runs
-        # ahead of it, its edge burns bright, behind the edge the pixel flames fade in, scrolling up
+        # chaos: it catches in his eyes and a burning edge spreads out over him from there, slowly at first; the
+        # heat runs ahead of it; behind the edge is the figure in the burning field, its eyes where his were
         if T_SPREAD - 0.1 < t < 9.0:
             dF = self.fire_dist(SX, SY)
             nz = fbm(SX / 220, SY / 220 + t * 0.8, 2, 3) - 0.5
@@ -640,21 +696,13 @@ class Film:
             a = np.clip((R - dF) / 150, 0, 1)
             live = (a > 0.02) & (t < self.T_burn + 0.4)
             if live.any():
-                fh, fw, _ = self.fire.shape
-                FY = SY / FIRE_K + 250 * float((t - 5.0) / 3.6)
-                FX = (SX - 540) / FIRE_K + fw / 2 + 5 * np.sin(FY / 14 + t * 7)
-                i = np.clip(FX.astype(int), 0, fw - 1); j = np.clip(FY.astype(int), 0, fh - 1)
-                rgb = self.fire[j, i]
-                hot = np.clip((rgb[..., 1] - 0.22) / 0.35, 0, 1) ** 0.8
-                fb = np.clip((0.8 * rgb[..., 0] + 0.65 * hot) * (0.9 + 0.15 * np.sin(t * 12 + FY / 30)), 0, 1)
-                fade = 1 - sstep(self.T_burn - 0.05, self.T_burn + 0.4, t)
-                dark = rgb[..., 0] < 0.28
-                burn = np.where(dark, b * (1 - fade), np.maximum(fb * fade, b * (1 - fade)))
-                b = np.where(live, b * (1 - a) + burn * a, b)
-                fl = live & ~dark & (a > 0.5)
-                col = np.where(fl[..., None], RED * (1 - hot[..., None]) + HOT * hot[..., None], col)
-                gl = np.where(live & (fade > 0.3) & (a > 0.5), 0, gl)
-                solid |= live & (fade > 0.3) & (a > 0.5)
+                fb, fc, fg = self.field_scene(SX, SY, t)
+                fade = 1 - sstep(self.T_burn - 0.05, self.T_burn + 0.4, t)     # then it burns through to the skull
+                mix = np.where(live, a * fade, 0.0)
+                b = b * (1 - mix) + fb * mix
+                col = col * (1 - mix[..., None]) + fc * mix[..., None]
+                gl = np.where(mix > 0.5, fg, gl)
+                solid |= mix > 0.5                                         # the figure is a black silhouette
             # the burning edge: sparks of code
             edge = np.clip(1 - np.abs(R - dF) / 40, 0, 1) * (R > 30) * (t < 7.8) * np.clip(0.55 + 2.2 * nz2, 0, 1)
             eg = edge > 0.3
