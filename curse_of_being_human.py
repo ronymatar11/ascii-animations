@@ -186,9 +186,11 @@ def lids(xl, op):
 # the neck his head turns on, his eyes
 ULT_K, ULT_C = 3.5, (240.0, 285.0)
 ULT_NECK = (262.0, 245.0)
-# his mouth: the line of his lips (it curves and slants with his face), the jaw below it, the jaw's hinge by his ear
-ULT_LIP = np.array([(163, 199), (168, 199), (185, 202), (205, 205), (225, 203), (242, 197), (258, 190)], float)
-ULT_JAW, ULT_JAW_R, ULT_HINGE = (205.0, 222.0), (62.0, 42.0), (280.0, 190.0)
+# his mouth: the dark slit between his lips, traced from the reference (it slants up toward his ear with his
+# tilted face, and curves), the jaw below it (an ellipse along the mouth: centre, half sizes), the hinge by his ear
+ULT_LIP = np.array([(219, 210), (225, 206), (235, 196), (245, 188), (255, 183), (265, 177), (275, 171), (281, 167)], float)
+ULT_JAW, ULT_JAW_R, ULT_HINGE = (256.0, 196.0), (38.0, 24.0), (291.0, 160.0)
+ULT_MDIR = (0.819, -0.573)                       # along the mouth, front corner to back corner
 ULT_LEAN, ULT_HIP = (235.0, 170.0), (300.0, 620.0)   # he leans in toward us about his face, sways about his hips
 ULT_EYES = [(243.0, 120.0), (191.0, 156.0)]
 ULT_HEAD = [(165, 100), (178, 80), (200, 66), (236, 60), (258, 68), (278, 86), (300, 88), (300, 130), (170, 130)]
@@ -532,8 +534,10 @@ class Film:
             gap = np.zeros(PX.shape, bool); depth = np.zeros(PX.shape)
             if v > 0.02:
                 lip = np.interp(PX, ULT_LIP[:, 0], ULT_LIP[:, 1])
-                e = np.hypot((PX - ULT_JAW[0]) / ULT_JAW_R[0], (PY - ULT_JAW[1]) / ULT_JAW_R[1])
-                th = 0.085 * v * (1 - sstep(0.45, 1.0, e)) * (PY > lip) * (PX > ULT_LIP[0, 0])   # fades into cheek and neck
+                du, dw = PX - ULT_JAW[0], PY - ULT_JAW[1]
+                u = du * ULT_MDIR[0] + dw * ULT_MDIR[1]; w = -du * ULT_MDIR[1] + dw * ULT_MDIR[0]
+                e = np.hypot(u / ULT_JAW_R[0], w / ULT_JAW_R[1])
+                th = 0.1 * v * (1 - sstep(0.5, 1.0, e)) * (PY > lip) * (PX > ULT_LIP[0, 0])    # fades into cheek and neck
                 qx, qy = PX - ULT_HINGE[0], PY - ULT_HINGE[1]
                 jx = ULT_HINGE[0] + qx * np.cos(th) - qy * np.sin(th)
                 jy = ULT_HINGE[1] + qx * np.sin(th) + qy * np.cos(th)
