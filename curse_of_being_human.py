@@ -1,5 +1,5 @@
 """
-The Curse of Being Human  |  9:16, red, orange and black, every frame is text, cut to a spoken-word track.
+The Curse of Being Human  |  9:16, red and black, every frame is text, cut to a spoken-word track.
 One continuous camera, no cuts: each scene turns into the next.
 
 the curse of being human: red code types across the screen and the code is ultron (from a reference),
@@ -71,13 +71,17 @@ POOL = [
 ]
 
 
-# the final grade: reds go pure red, the warm highlights (the paler colours) go orange, a little brighter
-def grade(col):
-    R = np.clip(col[..., 0] * 1.25, 0, 1)
-    w = col[..., 1] / (col[..., 0] + 1e-4)                      # how warm/pale it was: 0 deep red .. 1 white
-    G = R * np.interp(w, [0.0, 0.18, 0.45, 0.75, 1.0], [0.0, 0.03, 0.24, 0.4, 0.55])
-    B = R * np.interp(w, [0.0, 0.8, 1.0], [0.0, 0.02, 0.25])
-    return np.stack([R, G, B], -1).astype(np.float32)
+def glow(img, gain=1.15, bloom=0.85):
+    """the light of the characters spills around them: a soft blurred copy added on top"""
+    im = Image.fromarray(img)
+    small = im.resize((W // 4, H // 4), Image.BILINEAR).filter(ImageFilter.GaussianBlur(2.5))
+    halo = np.asarray(small.resize((W, H), Image.BILINEAR), np.float32)
+    return np.clip(img.astype(np.float32) * gain + halo * bloom, 0, 255).astype(np.uint8)
+
+def brighten(col, gain, gamma):
+    """lift a colour's brightness, keeping its hue: the dim parts lift the most"""
+    m = col.max(-1, keepdims=True)
+    return (col * np.minimum(1.0, gain * np.maximum(m, 1e-4) ** gamma) / np.maximum(m, 1e-4)).astype(np.float32)
 
 def redmap(b):
     b = np.clip(b, 0, 1)[..., None]
@@ -545,12 +549,10 @@ class Film:
             fb = np.clip((rgb[..., 0] - 0.05) / 0.8, 0, 1) ** 0.85                  # him: shaded, darks pushed down
             # he is written in the code too, brighter than the field; the field fades out softly around him
             fb = np.clip(fb * 1.3, 0, 1) ** 0.9
-            ub = fld * 0.3 * np.clip((0.5 - near) / 0.38, 0, 1) ** 1.2 + (1 - fld) * fb
+            ub = fld * 0.4 * np.clip((0.5 - near) / 0.38, 0, 1) ** 1.2 + (1 - fld) * fb
             white = rgb.min(-1) > 0.55
             ub = np.where(white, 1.0, ub)
-            lit = np.clip(fb * 1.25 - 0.25, 0, 1)[..., None] ** 1.2              # his lit side goes orange, his shade red
-            ucol = np.where(white[..., None], PALE, np.where((fld > 0.5)[..., None], RED * 0.42,     # the field sits back
-                            redmap(np.minimum(fb * 1.15, 1)) * (1 - lit) + HOT * lit))
+            ucol = np.where(white[..., None], PALE, np.where((fld > 0.5)[..., None], RED, redmap(np.minimum(fb * 1.15, 1))))
             # his eyes burn brighter and brighter, then flare: the fire starts there
             flare = float(smoother(4.55, 5.0, t)) * math.exp(-max(t - 5.0, 0.0) / 0.35)
             de = np.minimum.reduce([np.hypot(PX - ex, PY - ey) for ex, ey in ULT_EYES])
@@ -1119,8 +1121,10 @@ class Film:
         cidx, ccol = self.code_layer(t, fi)
         pulse = sum(math.exp(-(t - tb) / 0.2) for tb, _ in BEATS if t >= tb)     # the heartbeat lights the room
         ccol = ccol * (1 + 2.5 * pulse) * (1 - float(smoother(T_FADE[0], T_FADE[1], t)))
-        idx = np.where(empty, cidx, idx); col = np.where(empty[..., None], ccol, col)
-        img = render_fine(idx, grade(col))
+        # brighter: the picture lifts a lot, the code behind it a little, so it stays behind
+        col = np.where(empty[..., None], brighten(ccol, 1.6, 1.0), brighten(col, 1.35, 0.8))
+        idx = np.where(empty, cidx, idx)
+        img = glow(render_fine(idx, col))
         return self.lyric_overlay(img, t)
 
 
