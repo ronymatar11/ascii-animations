@@ -47,11 +47,11 @@ falls after it into a cell with hands gripping the bars; the prison is inside an
 turn to look at you, look away, then close; the eye with the prison closes last and its lid line becomes the
 seam of a closed ring box held in two hands; the fingers lift the lid on the hit, an Esc key inside, never
 pressed: everything goes dark but the key's light, then that too. Ultron, the fire, x-ray, money, the eye with bars and the ring box
-come from reference images in `assets/`, drawn in code. The lyrics
-type out as subtitles.
+come from reference images in `assets/`, drawn in code. No captions by default (`--lyrics` types
+the lyrics out as subtitles).
 ```
 python curse_of_being_human.py --music voice.mp4 --export curse.mp4
-python curse_of_being_human.py --music voice.mp4 --no-lyrics      # visuals only
+python curse_of_being_human.py --music voice.mp4 --lyrics         # with the lyrics as captions
 ```
 
 ## Ideas for next ones

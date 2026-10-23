@@ -256,7 +256,7 @@ BOXCAM_Z = [(24.45, math.log(6.9)), (24.85, math.log(6.95)), (25.6, math.log(4.9
 
 
 class Film:
-    def __init__(self, handle="", lyrics=True, seed=5):
+    def __init__(self, handle="", lyrics=False, seed=5):
         rng = np.random.default_rng(seed)
         self.handle, self.lyrics = handle, lyrics
         self.rand = rng.random((FROWS, FCOLS))
@@ -1037,7 +1037,7 @@ class Film:
 
     # ---------- compose
     def lyric_overlay(self, img, t):
-        if not self.lyrics and t < DUR - 1.1:
+        if not self.lyrics and not self.handle:
             return img
         im = Image.fromarray(img); dr = ImageDraw.Draw(im)
         items = LYRICS if self.lyrics else []
@@ -1103,6 +1103,6 @@ if __name__ == "__main__":
     ap.add_argument("--export", default="curse_of_being_human.mp4")
     ap.add_argument("--music", default=None, help="the spoken-word track (an audio file or a video with it)")
     ap.add_argument("--handle", default="", help="a handle typed at the very end (none by default)")
-    ap.add_argument("--no-lyrics", action="store_true")
+    ap.add_argument("--lyrics", action="store_true", help="type the lyrics out as captions (off by default)")
     a = ap.parse_args()
-    export(a.export, a.music, a.handle, not a.no_lyrics)
+    export(a.export, a.music, a.handle, a.lyrics)
