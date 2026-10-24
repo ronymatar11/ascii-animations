@@ -1376,22 +1376,58 @@ def sound_design(sr=44100, seed=4):
     return (out / max(1.0, np.abs(out).max() / 0.6)).astype(np.float32)
 
 def write_wav(path, x, sr=44100):
+    x = x if x.ndim == 2 else x[:, None]
     with wave.open(path, "wb") as w:
-        w.setnchannels(1); w.setsampwidth(2); w.setframerate(sr)
+        w.setnchannels(x.shape[1]); w.setsampwidth(2); w.setframerate(sr)
         w.writeframes((np.clip(x, -1, 1) * 32767).astype(np.int16).tobytes())
+
+def stretch(x, dur, sr, win=0.3, seed=2):
+    """the sound of x held for dur seconds: overlapping windows read slowly across it with their phases scattered
+    (a paul stretch), so it becomes one continuous sustained sound of the same music, no loop and no jump"""
+    n, w = int(dur * sr), int(win * sr) // 2 * 2
+    hop = w // 4
+    win_f = np.hanning(w)
+    out = np.zeros((n + w, x.shape[1]))
+    rng = np.random.default_rng(seed)
+    for k, o in enumerate(range(0, n, hop)):
+        i = int((len(x) - w) * o / max(n, 1))
+        ph = np.exp(2j * np.pi * rng.random(w // 2 + 1))
+        for c in range(x.shape[1]):
+            spec = np.fft.rfft(x[i:i + w, c] * win_f)
+            out[o:o + w, c] += np.fft.irfft(np.abs(spec) * ph, w) * win_f
+    out = out[:n]
+    ref = np.sqrt((x ** 2).mean()); got = np.sqrt((out ** 2).mean()) + 1e-9
+    return out * ref / got
+
+def paused_track(music, sr=44100):
+    """the spoken track with PAUSE seconds put in at PAUSE_AT, held on the music sounding right there"""
+    raw = subprocess.run([ffmpeg_bin(), "-v", "error", "-i", music, "-vn", "-ac", "2", "-ar", str(sr), "-f", "s16le", "-"],
+                         capture_output=True, check=True).stdout
+    x = np.frombuffer(raw, np.int16).astype(np.float32).reshape(-1, 2) / 32768
+    a, D, f = int(PAUSE_AT * sr), int(PAUSE * sr), int(0.15 * sr)
+    hold = stretch(x[int((PAUSE_AT - 0.05) * sr):int((PAUSE_AT + 0.6) * sr)], PAUSE + 0.15, sr)
+    out = np.zeros((len(x) + D, 2))
+    up = np.sin(np.linspace(0, np.pi / 2, f))[:, None]; down = np.cos(np.linspace(0, np.pi / 2, f))[:, None]
+    head = x[:a + f].copy(); head[a:] *= down
+    out[:a + f] += head
+    hold[:f] *= up; hold[-f:] *= down
+    out[a:a + len(hold)] += hold
+    tail = x[a:].copy(); tail[:f] *= up
+    out[a + D:a + D + len(tail)] += tail
+    return out.astype(np.float32)
 
 def export(path, music, handle, lyrics, sfx=True):
     film = Film(handle, lyrics, voice=voice_envelope(music))
     ff = ffmpeg_bin()
     cmd = [ff, "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W}x{H}",
            "-r", str(FPS), "-i", "-"]
-    tmp = None
+    tmp = tmpv = None
     if music:
-        # the track with the pause put in (its own background carried across it), the sound design under it
-        cmd += ["-i", music]
-        fc = (f"[1:a]asplit=3[s0][s1][s2];[s0]atrim=0:{PAUSE_AT},asetpts=N/SR/TB,afade=t=out:st={PAUSE_AT - 0.08}:d=0.08[a0];"
-              f"[s1]atrim=0.4:{0.4 + PAUSE},asetpts=N/SR/TB,afade=t=in:d=0.12,afade=t=out:st={PAUSE - 0.12}:d=0.12[bed];"
-              f"[s2]atrim=start={PAUSE_AT},asetpts=N/SR/TB,afade=t=in:d=0.08[a1];[a0][bed][a1]concat=n=3:v=0:a=1[voice]")
+        # the track with the pause put in (held on its own music), the sound design under it
+        tmpv = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
+        write_wav(tmpv, paused_track(music))
+        cmd += ["-i", tmpv]
+        fc = "[1:a]anull[voice]"
         if sfx:
             tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
             write_wav(tmp, sound_design())
@@ -1409,7 +1445,8 @@ def export(path, music, handle, lyrics, sfx=True):
         if fi % 15 == 0 or fi == n - 1:
             print(f"\rrendering {fi + 1}/{n}", end="", flush=True)
     p.stdin.close(); p.wait()
-    if tmp: os.unlink(tmp)
+    for f_ in (tmp, tmpv if music else None):
+        if f_: os.unlink(f_)
     print(f"\nsaved {path}")
 
 if __name__ == "__main__":
