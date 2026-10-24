@@ -27,9 +27,12 @@ it, opening and closing its wings -> to remain alive: it takes off and flies up,
 tying it to the stone snaps tight -> without ever truly living: it beats its wings and pulls with everything, the
 string yanks it back, the stone barely rocks; it never gets free, and the video ends on it still trying.
 
+The field lingers through a 2 s pause put in the track after "chaos"; under the voice a sound design synthesised
+here (no samples): a drone, keys, fire and wind, the tape, the snap, the fall, the bars, the stone, wings, the rope.
+
 Export:   python curse_of_being_human.py --music voice.mp4 --export curse.mp4
 """
-import argparse, math, os, subprocess
+import argparse, math, os, subprocess, tempfile, wave
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
@@ -38,7 +41,33 @@ from second_sun import (FCW, FCH, FCOLS, FROWS, FOY, FGX, FGY, FATLAS, SOFT, ren
                         stroke_glyph, smin, typed)
 
 FPS = 30
-DUR = 30.55
+DUR = 30.55                               # the story's length: the spoken track's own
+# the figure in the field gets more time: a pause is put in the track in the silence after "chaos" (filled with the
+# track's own background), and the film slows through it so the field lingers; all times below are the track's
+PAUSE_AT, PAUSE = 7.1, 2.0
+DUR_V = DUR + PAUSE                       # the video's length
+
+def _warp():
+    """video time -> story time: speed 1, easing down to a crawl through the pause, back to 1, losing PAUSE s"""
+    tv = np.arange(0, DUR_V + 1, 1 / 1200)
+    def lost(e):
+        w = np.clip((tv - 6.75) / 0.4, 0, 1); w = w * w * (3 - 2 * w)
+        d = np.clip((tv - e) / 0.7, 0, 1); w = w * (1 - d * d * (3 - 2 * d))
+        sp = 1 - 0.95 * w
+        return np.concatenate([[0], np.cumsum((sp[1:] + sp[:-1]) / 2) / 1200])
+    lo, hi = 7.2, 9.5
+    for _ in range(40):
+        e = (lo + hi) / 2
+        if tv[-1] - lost(e)[-1] < PAUSE: lo = e
+        else: hi = e
+    return tv, lost(e)
+_TV, _TS = _warp()
+
+def story(tv):
+    return float(np.interp(tv, _TV, _TS))
+
+def video(ts):
+    return float(np.interp(ts, _TS, _TV))
 HITS = [3.0, 14.0, 17.0, 26.5]            # the heaviest hits in the track
 LYRICS = [
     (2.7, 5.03, "Humans pursue peace,"),
@@ -212,7 +241,7 @@ FIRE_O = [(546.0, 359.0), (401.0, 447.0)]        # his eyes, on screen, when the
 FIELD_EYES = [(646.6, 564.1), (729.0, 553.7)]    # the figure's eyes in the painting
 FIELD_EM = (687.8, 558.9)                        # between them
 FIELD_FEET, FIELD_NECK = (700.0, 1600.0), (690.0, 760.0)   # the figure sways from its feet, its head tilts on its neck
-FIELD_BLINKS = [6.15, 7.0]                       # it closes its eyes and opens them
+FIELD_BLINKS = [6.15, 7.75, 8.75]                # it closes its eyes and opens them (video time)
 # the painting's camera: where its eyes are on screen, screen px per painting px, its tilt. it starts lined up with
 # ultron's eyes (his face is tilted), turns level and pulls back to the whole figure in the field
 FIELD_EX = [(5.0, 473.5), (5.7, 485.0), (6.5, 505.0), (7.4, 509.0), (8.5, 511.0)]
@@ -459,7 +488,8 @@ class Film:
         PX = FIELD_EM[0] + dx * c + dy * s_
         PY = FIELD_EM[1] - dx * s_ + dy * c
         img = self.field
-        tt = t - 5.0
+        tl = self.tv                                                    # it lives in real time, even in the pause
+        tt = tl - 5.0
         # the figure: sways from its feet, breathes, its head tilts on its neck (all of it smoothly, around it)
         wfig = 1 - sstep(0.85, 1.3, np.hypot((PX - 700) / 560, (PY - 1050) / 700))
         ang = 0.035 * math.sin(tt * 1.3 + 0.5) + 0.018 * math.sin(tt * 0.55 + 2.0)
@@ -486,7 +516,7 @@ class Film:
         bg = sample(self.field_plate, PX - wind - drift, PY)
         rgb = bg * (1 - fig[..., None]) + fg * fig[..., None]
         # it blinks: its eyes go dark and light again
-        bl = max(math.exp(-((t - tb) / 0.1) ** 4) for tb in FIELD_BLINKS)          # shut a moment, then open
+        bl = max(math.exp(-((tl - tb) / 0.1) ** 4) for tb in FIELD_BLINKS)         # shut a moment, then open
         de = np.minimum.reduce([np.hypot(FXp - fx, FYp - fy) for fx, fy in FIELD_EYES])
         if bl > 0.01:
             shut = np.clip((14 - de) / 6, 0, 1)[..., None] * bl
@@ -1212,7 +1242,10 @@ class Film:
                     stroke_width=4, stroke_fill=(0, 0, 0))
         return np.asarray(im)
 
-    def frame(self, t, fi):
+    def frame(self, tv, fi):
+        """the frame at video time tv: the story runs at story(tv), the code behind it in real time"""
+        self.tv = tv
+        t = story(tv)
         # one handheld camera float plus a kick on the heaviest hits, shared by every scene
         lock = float(sstep(7.2, 8.4, t))                              # still while the bust is on screen
         fx = (7 * math.sin(t * 0.7) + 4 * math.sin(t * 1.9 + 1)) * lock
@@ -1229,7 +1262,7 @@ class Film:
         idx = np.where(gl > 0, gl, glyphs(np.clip(b, 0, 1), int(t * 12), (FROWS, FCOLS)))
         col = np.clip(col * np.clip(0.4 + 0.9 * b, 0, 1)[..., None], 0, 1)
         empty = ~solid & (b < 0.035) & (gl == 0)
-        cidx, ccol = self.code_layer(t, fi)
+        cidx, ccol = self.code_layer(tv, fi)
         pulse = sum(math.exp(-(t - tb) / 0.2) for tb, _ in BEATS if t >= tb)     # the heartbeat lights the room
         ccol = ccol * (1 + 2.5 * pulse)
         # brighter: the picture lifts a lot, the code behind it a little, so it stays behind
@@ -1265,22 +1298,118 @@ def voice_envelope(music):
         out[i] = a
     return out
 
-def export(path, music, handle, lyrics):
+# ------------------------------------------------------------------ sound design: all synthesised here, no samples
+def _band(n, lo, hi, rng, sr):
+    """n samples of noise between lo and hi Hz"""
+    f = np.fft.rfftfreq(n, 1 / sr)
+    spec = np.fft.rfft(rng.standard_normal(n)) * ((f > lo) & (f < hi))
+    x = np.fft.irfft(spec, n)
+    return x / (np.abs(x).max() + 1e-9)
+
+def sound_design(sr=44100, seed=4):
+    """the background sounds, in video time: a low drone, keys typing, the fire and the wind in the field, the tape
+    whirring, the string snapping, the fall, the bars clanking, the stone forming, wings beating, the rope going taut"""
+    rng = np.random.default_rng(seed)
+    n = int(DUR_V * sr)
+    t = np.arange(n) / sr
+    out = np.zeros(n)
+    def put(start, x):
+        i = int(start * sr)
+        if i >= n: return
+        x = x[:n - i]; out[i:i + len(x)] += x
+    def env(n_, a, d):
+        e = np.ones(n_); ka, kd = int(a * sr), int(d * sr)
+        if ka: e[:ka] = np.linspace(0, 1, ka)
+        if kd: e[-kd:] *= np.linspace(1, 0, kd)
+        return e
+    V = video
+    # a low drone under it all
+    out += 0.05 * (np.sin(2 * np.pi * 42 * t) + 0.5 * np.sin(2 * np.pi * 84.4 * t)) * (0.7 + 0.3 * np.sin(2 * np.pi * 0.13 * t)) \
+        * np.clip(t / 2.5, 0, 1) * np.clip((DUR_V - t) / 0.5, 0, 1)
+    # keys typing while the code fills the screen
+    for tk in np.sort(rng.uniform(0.05, 2.6, 55)):
+        k = int(0.006 * sr); put(tk, 0.06 * rng.uniform(0.5, 1) * _band(k, 2000, 6000, rng, sr) * np.exp(-np.arange(k) / (0.0015 * sr)))
+    # his eyes flare: a rising hiss
+    a, b = V(4.5), V(5.1); k = int((b - a) * sr)
+    put(a, 0.12 * _band(k, 600, 4000, rng, sr) * np.linspace(0, 1, k) ** 2 * env(k, 0, 0.05))
+    # the field: the fire's roar and crackle, the wind in the wheat
+    a, b = V(5.05), V(8.6); k = int((b - a) * sr); tt = np.arange(k) / sr
+    put(a, 0.1 * _band(k, 30, 380, rng, sr) * env(k, 0.6, 0.8) * (0.8 + 0.2 * np.sin(2 * np.pi * 0.7 * tt)))
+    for tk in np.sort(rng.uniform(a + 0.2, b - 0.3, int((b - a) * 28))):
+        kk = int(rng.uniform(0.004, 0.02) * sr)
+        put(tk, rng.uniform(0.03, 0.16) * _band(kk, 900, 6000, rng, sr) * np.exp(-np.arange(kk) / (0.003 * sr)))
+    a, b = V(5.2), V(8.3); k = int((b - a) * sr); tt = np.arange(k) / sr
+    put(a, 0.07 * _band(k, 200, 1300, rng, sr) * env(k, 0.8, 0.8) * (0.45 + 0.55 * np.sin(2 * np.pi * 0.35 * tt + 1) ** 2))
+    # it burns through to the skull: a whoosh
+    k = int(0.7 * sr); put(V(7.3), 0.16 * _band(k, 150, 2500, rng, sr) * np.sin(np.linspace(0, np.pi, k)) ** 2)
+    # the tape running out: a whirr that speeds up and slows
+    a, b = V(9.2), V(10.6); k = int((b - a) * sr); tt = np.arange(k) / sr
+    fr = 90 + 170 * np.sin(np.pi * np.clip(tt / (b - a), 0, 1)) ** 1.5
+    saw = 2 * ((np.cumsum(fr) / sr) % 1) - 1
+    put(a, (0.035 * saw + 0.03 * _band(k, 2000, 7000, rng, sr)) * env(k, 0.1, 0.4))
+    # the string snaps
+    k = int(0.004 * sr); put(V(T_SNAP), 0.5 * _band(k, 500, 9000, rng, sr))
+    k = int(0.5 * sr); tt = np.arange(k) / sr
+    put(V(T_SNAP), 0.22 * np.sin(2 * np.pi * (220 * tt + 3 * np.sin(2 * np.pi * 9 * tt))) * np.exp(-tt / 0.12))
+    # the fall
+    a, b = V(11.9), V(13.0); k = int((b - a) * sr)
+    put(a, 0.1 * _band(k, 300, 3000, rng, sr) * np.sin(np.linspace(0, np.pi, k)) ** 1.5)
+    # the bars clank on the hit, and rattle
+    for tc, amp in ((14.0, 0.2), (14.22, 0.09), (14.41, 0.05)):
+        k = int(1.2 * sr); tt = np.arange(k) / sr
+        x = sum(np.sin(2 * np.pi * f * tt + rng.uniform(0, 6)) * np.exp(-tt / d) / (1 + i)
+                for i, (f, d) in enumerate([(523, 0.9), (1187, 0.6), (1873, 0.45), (2690, 0.3), (3611, 0.2)]))
+        put(V(tc), amp * x / 2)
+    # the skin turns to stone: a low grinding rumble
+    a, b = V(23.0), V(25.3); k = int((b - a) * sr)
+    put(a, 0.13 * _band(k, 25, 140, rng, sr) * np.sin(np.linspace(0, np.pi, k)) ** 1.2)
+    # the butterfly's wings: soft flutter, faster when it pulls; the rope thrums when it goes taut
+    a = V(T_FLY[0]); k = n - int(a * sr); tt = np.arange(k) / sr + a
+    tug = np.max([np.exp(-((tt - V(tb)) / 0.2) ** 2) for tb in BF_TUGS], 0)
+    rate = 9 * (1 + 0.5 * tug)
+    flap = np.abs(np.sin(np.pi * np.cumsum(rate) / sr)) ** 4
+    put(a, 0.07 * (0.6 + 0.8 * tug) * flap * _band(k, 150, 1100, rng, sr) * env(k, 0.3, 0.0))
+    for tb in BF_TUGS:
+        k = int(0.7 * sr); tt = np.arange(k) / sr
+        x = 0.2 * np.sin(2 * np.pi * 68 * tt) * np.exp(-tt / 0.25) + 0.05 * _band(k, 400, 1800, rng, sr) * np.exp(-tt / 0.08)
+        put(V(tb) - 0.03, x)
+    return (out / max(1.0, np.abs(out).max() / 0.6)).astype(np.float32)
+
+def write_wav(path, x, sr=44100):
+    with wave.open(path, "wb") as w:
+        w.setnchannels(1); w.setsampwidth(2); w.setframerate(sr)
+        w.writeframes((np.clip(x, -1, 1) * 32767).astype(np.int16).tobytes())
+
+def export(path, music, handle, lyrics, sfx=True):
     film = Film(handle, lyrics, voice=voice_envelope(music))
     ff = ffmpeg_bin()
     cmd = [ff, "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W}x{H}",
            "-r", str(FPS), "-i", "-"]
+    tmp = None
     if music:
-        cmd += ["-t", str(DUR), "-i", music, "-map", "0:v", "-map", "1:a",
-                "-af", f"afade=t=out:st={DUR - 0.6}:d=0.6", "-c:a", "aac", "-b:a", "192k"]
-    cmd += ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "17", "-preset", "medium", "-shortest", path]
+        # the track with the pause put in (its own background carried across it), the sound design under it
+        cmd += ["-i", music]
+        fc = (f"[1:a]asplit=3[s0][s1][s2];[s0]atrim=0:{PAUSE_AT},asetpts=N/SR/TB,afade=t=out:st={PAUSE_AT - 0.08}:d=0.08[a0];"
+              f"[s1]atrim=0.4:{0.4 + PAUSE},asetpts=N/SR/TB,afade=t=in:d=0.12,afade=t=out:st={PAUSE - 0.12}:d=0.12[bed];"
+              f"[s2]atrim=start={PAUSE_AT},asetpts=N/SR/TB,afade=t=in:d=0.08[a1];[a0][bed][a1]concat=n=3:v=0:a=1[voice]")
+        if sfx:
+            tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
+            write_wav(tmp, sound_design())
+            cmd += ["-i", tmp]
+            fc += ";[2:a]volume=0.55[fx];[voice][fx]amix=inputs=2:normalize=0:duration=first[mix]"
+        else:
+            fc += ";[voice]anull[mix]"
+        fc += f";[mix]afade=t=out:st={DUR_V - 0.6}:d=0.6[aout]"
+        cmd += ["-filter_complex", fc, "-map", "0:v", "-map", "[aout]", "-c:a", "aac", "-b:a", "192k", "-t", str(DUR_V)]
+    cmd += ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "17", "-preset", "medium", path]
     p = subprocess.Popen(cmd, stdin=subprocess.PIPE)
-    n = int(DUR * FPS)
+    n = int(DUR_V * FPS)
     for fi in range(n):
         p.stdin.write(film.frame(fi / FPS, fi).tobytes())
         if fi % 15 == 0 or fi == n - 1:
             print(f"\rrendering {fi + 1}/{n}", end="", flush=True)
     p.stdin.close(); p.wait()
+    if tmp: os.unlink(tmp)
     print(f"\nsaved {path}")
 
 if __name__ == "__main__":
@@ -1289,5 +1418,6 @@ if __name__ == "__main__":
     ap.add_argument("--music", default=None, help="the spoken-word track (an audio file or a video with it)")
     ap.add_argument("--handle", default="", help="a handle typed at the very end (none by default)")
     ap.add_argument("--lyrics", action="store_true", help="type the lyrics out as captions (off by default)")
+    ap.add_argument("--no-sfx", action="store_true", help="the spoken track only, without the sound design")
     a = ap.parse_args()
-    export(a.export, a.music, a.handle, a.lyrics)
+    export(a.export, a.music, a.handle, a.lyrics, not a.no_sfx)

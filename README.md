@@ -48,11 +48,14 @@ falls after it into a cell with hands gripping the bars; the prison is inside an
 turn to look at you, look away, then close; the camera keeps pulling back and the wall of eyes turns out to be the face of a stone; a butterfly
 resting on it takes off, the string tying it to the stone snaps tight, and it pulls and pulls, stuck, to the
 last frame. Ultron, the figure in the field, x-ray, money, the eye with bars and the butterfly on the stone
-come from reference images in `assets/`, drawn in code. No captions by default (`--lyrics` types
+come from reference images in `assets/`, drawn in code. A 2 s pause is put in the track after "chaos" so the figure in the field lingers (the video is 32.5 s), and a
+background sound design synthesised in the script (drone, fire, wind, tape, snap, clank, stone, wings) plays under
+the voice. No captions by default (`--lyrics` types
 the lyrics out as subtitles).
 ```
 python curse_of_being_human.py --music voice.mp4 --export curse.mp4
 python curse_of_being_human.py --music voice.mp4 --lyrics         # with the lyrics as captions
+python curse_of_being_human.py --music voice.mp4 --no-sfx         # the spoken track only
 ```
 
 ## Ideas for next ones
