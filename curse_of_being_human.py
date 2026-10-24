@@ -36,7 +36,7 @@ import argparse, math, os, subprocess, tempfile, wave
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-from code_to_monalisa import W, H, CI, RAMP, BLOCK, PRINTABLE, sstep, smoother, fbm, find_font, ffmpeg_bin
+from code_to_monalisa import W, H, CI, CHARS, RAMP, BLOCK, PRINTABLE, sstep, smoother, fbm, find_font, ffmpeg_bin, compose
 from second_sun import (FCW, FCH, FCOLS, FROWS, FOY, FGX, FGY, FATLAS, SOFT, render_fine, glyphs,
                         stroke_glyph, smin, typed)
 
@@ -109,9 +109,28 @@ POOL = [
 def glow(img, gain=1.15, bloom=0.85):
     """the light of the characters spills around them: a soft blurred copy added on top"""
     im = Image.fromarray(img)
+    h, w = img.shape[:2]
     small = im.resize((W // 4, H // 4), Image.BILINEAR).filter(ImageFilter.GaussianBlur(2.5))
-    halo = np.asarray(small.resize((W, H), Image.BILINEAR), np.float32)
+    halo = np.asarray(small.resize((w, h), Image.BILINEAR), np.float32)
     return np.clip(img.astype(np.float32) * gain + halo * bloom, 0, 255).astype(np.uint8)
+
+_ATLASES = {}
+def render_scaled(idx, col, k):
+    """the same grid of characters drawn k times bigger (the font itself, not the picture, scaled), for close-ups"""
+    if k not in _ATLASES:
+        font = find_font(10 * k)
+        fw, fh = FCW * k, FCH * k
+        arr = np.zeros((len(FATLAS), fh, fw), np.float32)
+        for i, ch in enumerate(CHARS[:-1]):
+            im = Image.new("L", (fw, fh), 0)
+            ImageDraw.Draw(im).text((fw / 2, fh / 2), ch, fill=255, font=font, anchor="mm")
+            arr[i] = np.asarray(im, np.float32) / 255.0
+        arr[BLOCK, k:fh - k, k:fw - k] = 1.0
+        _ATLASES[k] = arr
+    out = np.zeros((H * k, W * k, 3), np.uint8)
+    img = compose(_ATLASES[k], idx, col)
+    out[FOY * k:FOY * k + img.shape[0], :img.shape[1]] = img
+    return out
 
 def brighten(col, gain, gamma):
     """lift a colour's brightness, keeping its hue: the dim parts lift the most"""
@@ -1242,7 +1261,7 @@ class Film:
                     stroke_width=4, stroke_fill=(0, 0, 0))
         return np.asarray(im)
 
-    def frame(self, tv, fi):
+    def frame(self, tv, fi, scale=1):
         """the frame at video time tv: the story runs at story(tv), the code behind it in real time"""
         self.tv = tv
         t = story(tv)
@@ -1268,6 +1287,8 @@ class Film:
         # brighter: the picture lifts a lot, the code behind it a little, so it stays behind
         col = np.where(empty[..., None], brighten(ccol, 1.6, 1.0), brighten(col, 1.35, 0.8))
         idx = np.where(empty, cidx, idx)
+        if scale > 1:
+            return glow(render_scaled(idx, col, scale))
         img = glow(render_fine(idx, col))
         return self.lyric_overlay(img, t)
 
@@ -1449,6 +1470,47 @@ def export(path, music, handle, lyrics, sfx=True):
         if f_: os.unlink(f_)
     print(f"\nsaved {path}")
 
+# ------------------------------------------------------------------ the carousel: a close-up of the code in each scene
+# name, start (video time), centre of the close-up on the 1080x1920 frame, how much of it (1 = a 540x675 window)
+CLIPS = [("1_ultron", 2.2, (430, 520, 1.55)), ("2_field", 7.2, (500, 560, 1.0)), ("3_skull", 10.0, (520, 560, 1.15)),
+         ("4_money", 12.9, (310, 1380, 1.0)), ("5_cell", 15.6, (760, 1080, 1.35)), ("6_eye", 17.6, (560, 1000, 1.25)),
+         ("7_wall", 19.6, (760, 800, 1.0)), ("8_stone", 28.4, (700, 700, 1.25))]
+CLIP_LEN = 2.0
+
+def export_carousel(outdir, music, sfx=True):
+    """each scene, 2 s, as a 4:5 close-up at full quality: the frame rendered with characters twice the size, so
+    the close-up is the code itself, crisp, not a picture blown up; with the sound under it"""
+    os.makedirs(outdir, exist_ok=True)
+    film = Film(voice=voice_envelope(music))
+    ff = ffmpeg_bin()
+    wav = None
+    if music:
+        mix = paused_track(music)
+        if sfx:
+            fx = sound_design(); n = min(len(mix), len(fx))
+            mix = mix[:n] + 0.55 * fx[:n, None]
+        wav = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
+        write_wav(wav, mix)
+    for name, t0, (cx, cy, k) in CLIPS:
+        path = os.path.join(outdir, f"curse_{name}.mp4")
+        w, h = int(1080 * k), int(1350 * k)
+        x0 = min(max(int(2 * cx - w / 2), 0), 2 * W - w); y0 = min(max(int(2 * cy - h / 2), 0), 2 * H - h)
+        cmd = [ff, "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", "1080x1350", "-r", str(FPS), "-i", "-"]
+        if wav:
+            cmd += ["-ss", str(t0), "-t", str(CLIP_LEN), "-i", wav, "-map", "0:v", "-map", "1:a",
+                    "-af", f"afade=t=in:d=0.08,afade=t=out:st={CLIP_LEN - 0.12}:d=0.12", "-c:a", "aac", "-b:a", "256k"]
+        cmd += ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "12", "-preset", "slow", "-shortest", path]
+        p = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+        for j in range(int(CLIP_LEN * FPS)):
+            tv = t0 + j / FPS
+            img = Image.fromarray(film.frame(tv, int(round(tv * FPS)), scale=2)).crop((x0, y0, x0 + w, y0 + h))
+            if k != 1:
+                img = img.resize((1080, 1350), Image.LANCZOS)
+            p.stdin.write(np.asarray(img).tobytes())
+        p.stdin.close(); p.wait()
+        print("saved", path)
+    if wav: os.unlink(wav)
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--export", default="curse_of_being_human.mp4")
@@ -1456,5 +1518,9 @@ if __name__ == "__main__":
     ap.add_argument("--handle", default="", help="a handle typed at the very end (none by default)")
     ap.add_argument("--lyrics", action="store_true", help="type the lyrics out as captions (off by default)")
     ap.add_argument("--no-sfx", action="store_true", help="the spoken track only, without the sound design")
+    ap.add_argument("--carousel", default=None, help="a folder: write a 2 s close-up of the code in each scene there")
     a = ap.parse_args()
-    export(a.export, a.music, a.handle, a.lyrics, not a.no_sfx)
+    if a.carousel:
+        export_carousel(a.carousel, a.music, not a.no_sfx)
+    else:
+        export(a.export, a.music, a.handle, a.lyrics, not a.no_sfx)
