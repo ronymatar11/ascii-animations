@@ -56,6 +56,7 @@ the lyrics out as subtitles).
 python curse_of_being_human.py --music voice.mp4 --export curse.mp4
 python curse_of_being_human.py --music voice.mp4 --lyrics         # with the lyrics as captions
 python curse_of_being_human.py --music voice.mp4 --no-sfx         # the spoken track only
+python curse_of_being_human.py --music voice.mp4 --palette bright # brighter red/orange/cream, easier on a phone
 ```
 
 ## Ideas for next ones

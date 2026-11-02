@@ -132,6 +132,27 @@ def render_scaled(idx, col, k):
     out[FOY * k:FOY * k + img.shape[0], :img.shape[1]] = img
     return out
 
+# the bright version: every colour remapped by its brightness onto a lit palette (crimson -> scarlet -> orange ->
+# gold -> warm white), the darks lifted hard, and each character sits on a faint wash of its own colour so the
+# picture reads as a picture on a phone, not specks of light in the dark
+BRIGHT_X = [0.0, 0.1, 0.35, 0.62, 0.85, 1.0]
+BRIGHT_C = np.array([[0.04, 0.0, 0.01], [0.5, 0.02, 0.05], [0.92, 0.1, 0.08], [1.0, 0.3, 0.1],
+                     [1.0, 0.58, 0.22], [1.0, 0.88, 0.7]], np.float32)
+
+def bright_grade(col):
+    L = np.clip(col.max(-1), 0, 1) ** 0.72
+    warm = np.clip(col[..., 1] / (col[..., 0] + 1e-4), 0, 1)        # the pale highlights stay the palest
+    L = np.clip(L * (0.82 + 0.3 * warm), 0, 1)
+    return np.stack([np.interp(L, BRIGHT_X, BRIGHT_C[:, c]) for c in range(3)], -1).astype(np.float32)
+
+def wash(img, col, k, amount):
+    """a faint block of each character's colour behind it"""
+    bg = np.repeat(np.repeat(col * amount, FCH * k, 0), FCW * k, 1)
+    out = img.astype(np.float32) / 255
+    y0 = FOY * k
+    out[y0:y0 + bg.shape[0], :bg.shape[1]] = np.maximum(out[y0:y0 + bg.shape[0], :bg.shape[1]], bg)
+    return (np.clip(out, 0, 1) * 255).astype(np.uint8)
+
 def brighten(col, gain, gamma):
     """lift a colour's brightness, keeping its hue: the dim parts lift the most"""
     m = col.max(-1, keepdims=True)
@@ -355,10 +376,11 @@ T_PETRIFY = (22.9, 24.9)                         # meanwhile the skin darkens to
 
 
 class Film:
-    def __init__(self, handle="", lyrics=False, seed=5, voice=None):
+    def __init__(self, handle="", lyrics=False, seed=5, voice=None, palette="red"):
         rng = np.random.default_rng(seed)
         self.handle, self.lyrics = handle, lyrics
         self.voice = voice
+        self.palette = palette
         self.rand = rng.random((FROWS, FCOLS))
         here = os.path.dirname(os.path.abspath(__file__))
         self.ultron = np.asarray(Image.open(os.path.join(here, "assets", "ultron.png")).convert("RGB"), np.float32) / 255.0
@@ -1287,6 +1309,12 @@ class Film:
         # brighter: the picture lifts a lot, the code behind it a little, so it stays behind
         col = np.where(empty[..., None], brighten(ccol, 1.6, 1.0), brighten(col, 1.35, 0.8))
         idx = np.where(empty, cidx, idx)
+        if self.palette == "bright":
+            col = bright_grade(col)
+            col = np.where(empty[..., None], col * 0.75, col)              # the code behind stays a step back
+            img = render_scaled(idx, col, scale) if scale > 1 else render_fine(idx, col)
+            img = wash(img, np.where(empty[..., None], 0.0, col), scale, 0.2)
+            return glow(img, 1.1, 1.0) if scale > 1 else self.lyric_overlay(glow(img, 1.1, 1.0), t)
         if scale > 1:
             return glow(render_scaled(idx, col, scale))
         img = glow(render_fine(idx, col))
@@ -1437,8 +1465,8 @@ def paused_track(music, sr=44100):
     out[a + D:a + D + len(tail)] += tail
     return out.astype(np.float32)
 
-def export(path, music, handle, lyrics, sfx=True):
-    film = Film(handle, lyrics, voice=voice_envelope(music))
+def export(path, music, handle, lyrics, sfx=True, palette="red"):
+    film = Film(handle, lyrics, voice=voice_envelope(music), palette=palette)
     ff = ffmpeg_bin()
     cmd = [ff, "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W}x{H}",
            "-r", str(FPS), "-i", "-"]
@@ -1477,11 +1505,11 @@ CLIPS = [("1_ultron", 2.2, (430, 520, 1.55)), ("2_field", 7.2, (500, 560, 1.0)),
          ("7_wall", 19.6, (760, 800, 1.0)), ("8_stone", 28.4, (700, 700, 1.25))]
 CLIP_LEN = 2.0
 
-def export_carousel(outdir, music, sfx=True):
+def export_carousel(outdir, music, sfx=True, palette="red"):
     """each scene, 2 s, as a 4:5 close-up at full quality: the frame rendered with characters twice the size, so
     the close-up is the code itself, crisp, not a picture blown up; with the sound under it"""
     os.makedirs(outdir, exist_ok=True)
-    film = Film(voice=voice_envelope(music))
+    film = Film(voice=voice_envelope(music), palette=palette)
     ff = ffmpeg_bin()
     wav = None
     if music:
@@ -1518,9 +1546,10 @@ if __name__ == "__main__":
     ap.add_argument("--handle", default="", help="a handle typed at the very end (none by default)")
     ap.add_argument("--lyrics", action="store_true", help="type the lyrics out as captions (off by default)")
     ap.add_argument("--no-sfx", action="store_true", help="the spoken track only, without the sound design")
+    ap.add_argument("--palette", default="red", choices=["red", "bright"], help="bright: lifted red/orange/cream, for phones")
     ap.add_argument("--carousel", default=None, help="a folder: write a 2 s close-up of the code in each scene there")
     a = ap.parse_args()
     if a.carousel:
-        export_carousel(a.carousel, a.music, not a.no_sfx)
+        export_carousel(a.carousel, a.music, not a.no_sfx, a.palette)
     else:
-        export(a.export, a.music, a.handle, a.lyrics, not a.no_sfx)
+        export(a.export, a.music, a.handle, a.lyrics, not a.no_sfx, a.palette)
